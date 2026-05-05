@@ -5,7 +5,7 @@ import Image from "next/image";
 import {
   Key, Lock, Copy, Check, Trash2, LogOut, Loader2, Eye, EyeOff,
   Search, ChevronDown, Clock, Users, Settings, X, FolderPlus, Menu,
-  Terminal, ExternalLink
+  Terminal, ExternalLink, Plus, UserPlus, Shield, Trash
 } from "lucide-react";
 import * as api from "@/lib/api";
 import * as cr from "@/lib/crypto";
@@ -227,11 +227,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const filtered = secrets.filter(s => s.key_name.toLowerCase().includes(search.toLowerCase()));
 
-  const tabs: { icon: typeof Key; label: string; tab: SidebarTab; soon?: boolean }[] = [
+  const tabs: { icon: typeof Key; label: string; tab: SidebarTab }[] = [
     { icon: Key, label: "Secrets", tab: "secrets" },
-    { icon: Clock, label: "Activity", tab: "activity", soon: true },
-    { icon: Users, label: "Team", tab: "access", soon: true },
-    { icon: Settings, label: "Settings", tab: "settings", soon: true },
+    { icon: Clock, label: "Activity", tab: "activity" },
+    { icon: Users, label: "Team", tab: "access" },
+    { icon: Settings, label: "Settings", tab: "settings" },
   ];
 
   return (
@@ -256,11 +256,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         <nav style={{ flex: 1, padding: "0 12px", marginTop: 8 }}>
           {tabs.map(item => (
-            <button key={item.label} onClick={() => { if (!item.soon) setActiveTab(item.tab); setSidebarOpen(false); }}
-              className={`mp-sidebar-item ${activeTab === item.tab ? "mp-sidebar-item--active" : item.soon ? "mp-sidebar-item--soon" : "mp-sidebar-item--default"}`}>
+            <button key={item.label} onClick={() => { setActiveTab(item.tab); setSidebarOpen(false); }}
+              className={`mp-sidebar-item ${activeTab === item.tab ? "mp-sidebar-item--active" : "mp-sidebar-item--default"}`}>
               <item.icon style={{ width: 18, height: 18 }} />
               <span>{item.label}</span>
-              {item.soon && <span style={{ marginLeft: "auto", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.6 }}>Soon</span>}
             </button>
           ))}
         </nav>
@@ -395,7 +394,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
               )}
             </div>
-          ) : <ComingSoonTab tab={activeTab} />}
+          ) : activeTab === "activity" ? (
+            <ActivityTab vaultId={activeVault?.id} />
+          ) : activeTab === "access" ? (
+            <TeamTab />
+          ) : activeTab === "settings" ? (
+            <SettingsTab user={user} />
+          ) : null}
         </main>
       </div>
 
@@ -468,26 +473,382 @@ function EmptySecrets({ search, vaultId }: { search: string; vaultId: string }) 
 }
 
 /* ═══════════════════════════════════════════════════════════
-   COMING SOON
+   ACTIVITY TAB
    ═══════════════════════════════════════════════════════════ */
 
-function ComingSoonTab({ tab }: { tab: SidebarTab }) {
-  const info: Record<string, { title: string; desc: string; cli: string }> = {
-    activity: { title: "Activity Log", desc: "Track who accessed, created, or modified secrets.", cli: "Audit logs available via API:\nGET /audit-logs?vault_id=<id>" },
-    access: { title: "Team Management", desc: "Manage team members, roles, and vault sharing.", cli: "meowpass team list\nmeowpass team invite EMAIL --team ID\nmeowpass share VAULT_ID --team ID" },
-    settings: { title: "Settings", desc: "Manage API keys, view your plan, and account settings.", cli: "meowpass apikey list\nmeowpass apikey create NAME\nmeowpass whoami" },
-  };
-  const { title, desc, cli } = info[tab] || { title: "", desc: "", cli: "" };
+interface AuditEntry { id: string; action: string; resource_type: string; resource_id?: string; created_at: string; ip_address?: string; }
+
+function ActivityTab({ vaultId }: { vaultId?: string }) {
+  const [logs, setLogs] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try { setLogs(await api.listAuditLogs(vaultId) || []); } catch { /* */ }
+      setLoading(false);
+    })();
+  }, [vaultId]);
+
+  const actionColors: Record<string, string> = { create: "#22c55e", set: "#FF6D00", delete: "var(--red)", share: "#3b82f6", rotate: "#a855f7" };
 
   return (
-    <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", textAlign: "center" }}>
-      <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 999, background: "var(--orange-glow)", color: "var(--orange)", fontWeight: 500, marginBottom: 16 }}>Coming Soon</span>
-      <h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--text)" }}>{title}</h2>
-      <p style={{ fontSize: 14, color: "var(--text-dim)", marginTop: 8, maxWidth: 400 }}>{desc}</p>
-      {cli && (
-        <div style={{ marginTop: 24, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-card)", padding: 16, textAlign: "left", maxWidth: 400, width: "100%" }}>
-          <div style={{ fontSize: 12, color: "var(--text-ghost)", marginBottom: 8 }}>Available now via CLI:</div>
-          <pre style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text)", whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0 }}>{cli}</pre>
+    <div className="animate-fade-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>Activity Log</h2>
+          <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Recent actions on your vaults and secrets</p>
+        </div>
+        <CLIHint cmd="curl -H 'Authorization: Bearer TOKEN' API/audit-logs" label="API" />
+      </div>
+
+      {loading ? <div style={{ display: "flex", justifyContent: "center", padding: 64 }}><Loader2 style={{ width: 20, height: 20, color: "var(--text-dim)" }} className="animate-spin" /></div> :
+      logs.length === 0 ? (
+        <div style={{ borderRadius: 12, border: "1px dashed var(--border)", padding: 48, textAlign: "center", background: "rgba(15,20,32,0.5)" }}>
+          <Clock style={{ width: 32, height: 32, color: "var(--text-ghost)", margin: "0 auto 12px", display: "block" }} />
+          <p style={{ fontSize: 14, color: "var(--text-dim)" }}>No activity yet</p>
+          <p style={{ fontSize: 12, color: "var(--text-ghost)", marginTop: 4 }}>Actions on vaults and secrets will appear here</p>
+        </div>
+      ) : (
+        <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", overflow: "hidden" }}>
+          {logs.map((log, i) => (
+            <div key={log.id} style={{ padding: "12px 20px", borderBottom: i < logs.length - 1 ? "1px solid var(--border)" : "none", display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: actionColors[log.action] || "var(--text-ghost)", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: "var(--text)" }}>
+                  <span style={{ color: actionColors[log.action] || "var(--text-dim)", fontWeight: 500 }}>{log.action}</span>
+                  {" "}
+                  <span style={{ color: "var(--text-dim)" }}>{log.resource_type}</span>
+                  {log.resource_id && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-dim)", marginLeft: 4 }}>{log.resource_id.length > 20 ? log.resource_id.slice(0, 8) + "..." : log.resource_id}</span>}
+                </div>
+              </div>
+              <span style={{ fontSize: 11, color: "var(--text-ghost)", fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
+                {new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TEAM TAB
+   ═══════════════════════════════════════════════════════════ */
+
+interface Team { id: string; name: string; }
+interface TeamMember { user_id: string; role: string; email?: string; }
+
+function TeamTab() {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
+  const [busy, setBusy] = useState(false);
+
+  const loadTeams = useCallback(async () => {
+    setLoading(true);
+    try {
+      const t = await api.listTeams() || [];
+      setTeams(t);
+      if (!selectedTeam && t.length > 0) setSelectedTeam(t[0]);
+    } catch { /* */ }
+    setLoading(false);
+  }, [selectedTeam]);
+
+  useEffect(() => { loadTeams(); }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (!selectedTeam) return;
+    (async () => {
+      try { setMembers(await api.listTeamMembers(selectedTeam.id) || []); } catch { /* */ }
+    })();
+  }, [selectedTeam]);
+
+  async function handleCreateTeam(e: React.FormEvent) {
+    e.preventDefault(); if (!newTeamName.trim()) return;
+    setBusy(true);
+    try { await api.createTeam(newTeamName.trim()); setNewTeamName(""); setShowCreate(false); loadTeams(); } catch { /* */ }
+    setBusy(false);
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault(); if (!inviteEmail.trim() || !selectedTeam) return;
+    setBusy(true);
+    try { await api.inviteTeamMember(selectedTeam.id, inviteEmail.trim(), inviteRole); setInviteEmail(""); setShowInvite(false); setMembers(await api.listTeamMembers(selectedTeam.id) || []); } catch { /* */ }
+    setBusy(false);
+  }
+
+  const roleColors: Record<string, string> = { owner: "#FF6D00", admin: "#3b82f6", member: "var(--text-dim)" };
+
+  return (
+    <div className="animate-fade-in">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>Teams</h2>
+          <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>Manage teams and vault sharing</p>
+        </div>
+        <button className="mp-cli-hint" onClick={() => setShowCreate(true)} style={{ gap: 6 }}>
+          <Plus style={{ width: 14, height: 14, color: "var(--orange)" }} />
+          <span style={{ color: "var(--text-dim)" }}>New Team</span>
+        </button>
+      </div>
+
+      {loading ? <div style={{ display: "flex", justifyContent: "center", padding: 64 }}><Loader2 style={{ width: 20, height: 20, color: "var(--text-dim)" }} className="animate-spin" /></div> :
+      teams.length === 0 ? (
+        <div style={{ borderRadius: 12, border: "1px dashed var(--border)", padding: 48, textAlign: "center", background: "rgba(15,20,32,0.5)" }}>
+          <Users style={{ width: 32, height: 32, color: "var(--text-ghost)", margin: "0 auto 12px", display: "block" }} />
+          <p style={{ fontSize: 14, color: "var(--text-dim)" }}>No teams yet</p>
+          <div style={{ marginTop: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-card)", padding: 12, display: "inline-block", textAlign: "left" }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+              <span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>meowpass team create my-team</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 16, flexDirection: "column" }}>
+          {/* Team selector */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {teams.map(t => (
+              <button key={t.id} onClick={() => setSelectedTeam(t)} style={{
+                padding: "6px 14px", borderRadius: 8, fontSize: 13, border: "1px solid var(--border)", cursor: "pointer",
+                background: selectedTeam?.id === t.id ? "var(--orange-glow)" : "var(--bg-card)",
+                color: selectedTeam?.id === t.id ? "var(--orange)" : "var(--text-dim)",
+                fontWeight: selectedTeam?.id === t.id ? 500 : 400,
+              }}>{t.name}</button>
+            ))}
+          </div>
+
+          {/* Members */}
+          {selectedTeam && (
+            <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", overflow: "hidden" }}>
+              <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{selectedTeam.name}</span>
+                <button className="mp-cli-hint" onClick={() => setShowInvite(true)} style={{ gap: 6, padding: "4px 10px" }}>
+                  <UserPlus style={{ width: 12, height: 12, color: "var(--orange)" }} />
+                  <span style={{ color: "var(--text-dim)", fontSize: 11 }}>Invite</span>
+                </button>
+              </div>
+              {members.length === 0 ? (
+                <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--text-dim)" }}>No members yet</div>
+              ) : members.map((m, i) => (
+                <div key={m.user_id} style={{ padding: "10px 20px", borderBottom: i < members.length - 1 ? "1px solid var(--border)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>{m.email || m.user_id.slice(0, 8) + "..."}</span>
+                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--bg-elevated)", color: roleColors[m.role] || "var(--text-dim)", fontWeight: 500, textTransform: "capitalize" }}>{m.role}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Create team inline form */}
+      {showCreate && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={() => setShowCreate(false)} />
+          <div className="mp-card animate-fade-in" style={{ position: "relative", width: "100%", maxWidth: 380, zIndex: 1 }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Create Team</h2>
+              <button className="mp-icon-btn" onClick={() => setShowCreate(false)}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            <form onSubmit={handleCreateTeam} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+              <Field label="Team Name" value={newTeamName} onChange={setNewTeamName} placeholder="backend" autoFocus />
+              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass team create {newTeamName || "NAME"}</code></p>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button type="button" className="mp-btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+                <button type="submit" disabled={busy || !newTeamName.trim()} className="mp-btn-primary" style={{ flex: 1 }}>
+                  {busy ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : "Create"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Invite modal */}
+      {showInvite && selectedTeam && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={() => setShowInvite(false)} />
+          <div className="mp-card animate-fade-in" style={{ position: "relative", width: "100%", maxWidth: 380, zIndex: 1 }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Invite to {selectedTeam.name}</h2>
+              <button className="mp-icon-btn" onClick={() => setShowInvite(false)}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            <form onSubmit={handleInvite} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+              <Field label="Email" type="email" value={inviteEmail} onChange={setInviteEmail} placeholder="teammate@company.com" autoFocus />
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 8 }}>Role</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {["member", "admin"].map(r => (
+                    <button key={r} type="button" onClick={() => setInviteRole(r)} style={{
+                      flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 13, border: "1px solid var(--border)", cursor: "pointer", textTransform: "capitalize",
+                      background: inviteRole === r ? "var(--orange-glow)" : "var(--bg-deep)",
+                      color: inviteRole === r ? "var(--orange)" : "var(--text-dim)",
+                      fontWeight: inviteRole === r ? 500 : 400,
+                    }}>{r}</button>
+                  ))}
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass team invite {inviteEmail || "EMAIL"} --team {selectedTeam.id.slice(0, 8)}... --role {inviteRole}</code></p>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button type="button" className="mp-btn-secondary" onClick={() => setShowInvite(false)}>Cancel</button>
+                <button type="submit" disabled={busy || !inviteEmail.trim()} className="mp-btn-primary" style={{ flex: 1 }}>
+                  {busy ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : "Invite"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SETTINGS TAB
+   ═══════════════════════════════════════════════════════════ */
+
+interface ApiKeyInfo { id: string; name: string; key_prefix: string; created_at: string; }
+
+function SettingsTab({ user }: { user: User | null }) {
+  const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [createdKey, setCreatedKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  const loadKeys = useCallback(async () => {
+    setLoading(true);
+    try { setApiKeys(await api.listApiKeys() || []); } catch { /* */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadKeys(); }, [loadKeys]);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault(); if (!newKeyName.trim()) return;
+    setBusy(true);
+    try {
+      const result = await api.createApiKey(newKeyName.trim());
+      setCreatedKey(result.key || result.api_key || "");
+      setNewKeyName("");
+      loadKeys();
+    } catch { /* */ }
+    setBusy(false);
+  }
+
+  async function handleRevoke(id: string, name: string) {
+    if (!confirm(`Revoke API key "${name}"? This cannot be undone.`)) return;
+    try { await api.revokeApiKey(id); loadKeys(); } catch { /* */ }
+  }
+
+  return (
+    <div className="animate-fade-in">
+      {/* Account info */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", marginBottom: 16 }}>Account</h2>
+        <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", padding: 20 }}>
+          {user && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                <span style={{ color: "var(--text-dim)" }}>Email</span>
+                <span style={{ color: "var(--text)", fontFamily: "'JetBrains Mono', monospace" }}>{user.email}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                <span style={{ color: "var(--text-dim)" }}>Name</span>
+                <span style={{ color: "var(--text)" }}>{user.name}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                <span style={{ color: "var(--text-dim)" }}>Plan</span>
+                <span style={{ color: "var(--orange)", fontWeight: 500, textTransform: "capitalize" }}>{user.subscription_tier}</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass whoami</code></p>
+      </div>
+
+      {/* API Keys */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>API Keys</h2>
+            <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>For MCP server, CI/CD, and SDK access</p>
+          </div>
+          <button className="mp-cli-hint" onClick={() => { setShowCreate(true); setCreatedKey(""); }} style={{ gap: 6 }}>
+            <Plus style={{ width: 14, height: 14, color: "var(--orange)" }} />
+            <span style={{ color: "var(--text-dim)" }}>New Key</span>
+          </button>
+        </div>
+
+        {/* Created key alert */}
+        {createdKey && (
+          <div style={{ borderRadius: 12, border: "1px solid var(--orange)", background: "var(--orange-glow)", padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--orange)", marginBottom: 8 }}>API key created — copy it now, it won&apos;t be shown again</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <code style={{ flex: 1, fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: "var(--text)", wordBreak: "break-all" }}>{createdKey}</code>
+              <button className="mp-icon-btn" onClick={() => { navigator.clipboard.writeText(createdKey); setCopiedKey(true); setTimeout(() => setCopiedKey(false), 2000); }}>
+                {copiedKey ? <Check style={{ width: 14, height: 14, color: "#22c55e" }} /> : <Copy style={{ width: 14, height: 14 }} />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? <div style={{ display: "flex", justifyContent: "center", padding: 40 }}><Loader2 style={{ width: 20, height: 20, color: "var(--text-dim)" }} className="animate-spin" /></div> :
+        apiKeys.length === 0 ? (
+          <div style={{ borderRadius: 12, border: "1px dashed var(--border)", padding: 48, textAlign: "center", background: "rgba(15,20,32,0.5)" }}>
+            <Shield style={{ width: 32, height: 32, color: "var(--text-ghost)", margin: "0 auto 12px", display: "block" }} />
+            <p style={{ fontSize: 14, color: "var(--text-dim)" }}>No API keys</p>
+            <p style={{ fontSize: 12, color: "var(--text-ghost)", marginTop: 4 }}>Create one for MCP server or CI/CD</p>
+          </div>
+        ) : (
+          <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", overflow: "hidden" }}>
+            {apiKeys.map((k, i) => (
+              <div key={k.id} style={{ padding: "12px 20px", borderBottom: i < apiKeys.length - 1 ? "1px solid var(--border)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{k.name}</div>
+                  <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-dim)", marginTop: 2 }}>{k.key_prefix}••• · Created {new Date(k.created_at).toLocaleDateString()}</div>
+                </div>
+                <button className="mp-icon-btn" title="Revoke" onClick={() => handleRevoke(k.id, k.name)}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--red)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-dim)")}>
+                  <Trash style={{ width: 14, height: 14 }} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass apikey create NAME</code></p>
+      </div>
+
+      {/* Create key modal */}
+      {showCreate && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={() => setShowCreate(false)} />
+          <div className="mp-card animate-fade-in" style={{ position: "relative", width: "100%", maxWidth: 380, zIndex: 1 }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Create API Key</h2>
+              <button className="mp-icon-btn" onClick={() => setShowCreate(false)}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            <form onSubmit={handleCreate} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+              <Field label="Key Name" value={newKeyName} onChange={setNewKeyName} placeholder="my-mcp-key" autoFocus />
+              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass apikey create {newKeyName || "NAME"}</code></p>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button type="button" className="mp-btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+                <button type="submit" disabled={busy || !newKeyName.trim()} className="mp-btn-primary" style={{ flex: 1 }}>
+                  {busy ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : "Create"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -45,3 +45,25 @@ export const listSecrets = (vaultId: string) => request("GET", `/vaults/${vaultI
 export const getSecret = (vaultId: string, key: string) => request("GET", `/vaults/${vaultId}/secrets/${key}`);
 export const setSecret = (vaultId: string, key: string, encryptedValue: number[]) => request("PUT", `/vaults/${vaultId}/secrets/${key}`, { encrypted_value: encryptedValue, nonce: [] });
 export const deleteSecret = (vaultId: string, key: string) => request("DELETE", `/vaults/${vaultId}/secrets/${key}`);
+
+// Audit logs
+export const listAuditLogs = (vaultId?: string, limit = 50) => {
+  const params = new URLSearchParams();
+  if (vaultId) params.set("vault_id", vaultId);
+  params.set("limit", String(limit));
+  return request("GET", `/audit-logs?${params}`);
+};
+
+// Teams
+export const listTeams = () => request("GET", "/teams");
+export const createTeam = (name: string) => request("POST", "/teams", { name });
+export const listTeamMembers = (teamId: string) => request("GET", `/teams/${teamId}/members`);
+export const inviteTeamMember = (teamId: string, email: string, role = "member") => request("POST", `/teams/${teamId}/invite`, { email, role });
+
+// API Keys
+export const listApiKeys = () => request("GET", "/apikeys");
+export const createApiKey = (name: string) => request("POST", "/apikeys", { name, scopes: ["read", "write"] });
+export const revokeApiKey = (id: string) => request("DELETE", `/apikeys/${id}`);
+
+// Subscription
+export const getSubscription = () => request("GET", "/subscription");
