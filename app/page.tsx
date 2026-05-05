@@ -273,6 +273,27 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             {activeTab === "settings" && "meowpass apikey list"}
           </code>
         </div>
+
+        {/* Essential links */}
+        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { label: "Website", href: "https://meowpass.dev" },
+              { label: "Docs", href: "https://meowpass.dev/docs" },
+              { label: "Security", href: "https://meowpass.dev/security" },
+              { label: "Discord", href: "https://discord.gg/GTZcZKRQu7" },
+              { label: "GitHub", href: "https://github.com/meowrithm" },
+            ].map(link => (
+              <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 11, color: "var(--text-ghost)", textDecoration: "none", transition: "color 0.15s", display: "flex", alignItems: "center", gap: 6 }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--orange)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-ghost)")}>
+                <ExternalLink style={{ width: 10, height: 10 }} />
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </div>
       </aside>
 
       {/* ── Main panel ── */}
