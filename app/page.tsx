@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import {
-  Key, Lock, Plus, Copy, Check, Trash2, LogOut, Loader2, Eye, EyeOff,
-  Search, ChevronDown, Shield, Clock, Users, Settings, Pencil, X, FolderPlus, Menu
+  Key, Lock, Copy, Check, Trash2, LogOut, Loader2, Eye, EyeOff,
+  Search, ChevronDown, Clock, Users, Settings, X, FolderPlus, Menu,
+  Terminal, ExternalLink
 } from "lucide-react";
 import * as api from "@/lib/api";
 import * as cr from "@/lib/crypto";
@@ -14,9 +15,10 @@ import * as cr from "@/lib/crypto";
    ═══════════════════════════════════════════════════════════ */
 
 type View = "login" | "unlock" | "dashboard";
-type Modal = null | "add-secret" | "edit-secret" | "add-vault";
+type Modal = null | "add-vault";
+type SidebarTab = "secrets" | "activity" | "access" | "settings";
 interface Vault { id: string; name: string; created_at: string; }
-interface Secret { key_name: string; version: number; }
+interface Secret { key_name: string; version: number; updated_at?: string; }
 interface User { email: string; name: string; subscription_tier: string; }
 
 /* ═══════════════════════════════════════════════════════════
@@ -141,21 +143,19 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [secretsLoading, setSecretsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<Modal>(null);
-  const [editKey, setEditKey] = useState("");
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState("");
   const [vaultDropdown, setVaultDropdown] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SidebarTab>("secrets");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handler(e: MouseEvent) { if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setVaultDropdown(false); }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Load vaults + user
   const loadVaults = useCallback(async () => {
     setLoading(true);
     try {
@@ -169,7 +169,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { loadVaults(); }, []);// eslint-disable-line
 
-  // Load secrets when vault changes
   const loadSecrets = useCallback(async () => {
     if (!activeVault) return;
     setSecretsLoading(true);
@@ -181,7 +180,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { loadSecrets(); }, [loadSecrets]);
 
-  // Decrypt helper
   async function decryptValue(keyName: string): Promise<string> {
     if (!activeVault) throw new Error("No vault");
     const mk = api.getMasterKey();
@@ -218,6 +216,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     try { await api.deleteSecret(activeVault.id, keyName); loadSecrets(); } catch { /* */ }
   }
 
+  async function handleDeleteVault() {
+    if (!activeVault || !confirm(`Delete vault "${activeVault.name}" and ALL its secrets? This cannot be undone.`)) return;
+    try {
+      await api.deleteVault(activeVault.id);
+      setActiveVault(null);
+      loadVaults();
+    } catch { /* */ }
+  }
+
   async function handleCreateVault(name: string) {
     const mk = api.getMasterKey();
     if (!mk) return;
@@ -230,17 +237,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const filtered = secrets.filter(s => s.key_name.toLowerCase().includes(search.toLowerCase()));
 
-  const sidebarItems = [
-    { icon: Key, label: "Secrets", active: true },
-    { icon: Shield, label: "Environments", soon: true },
-    { icon: Clock, label: "Audit Trail", soon: true },
-    { icon: Users, label: "Access", soon: true },
-    { icon: Settings, label: "Settings", soon: true },
+  const sidebarItems: { icon: typeof Key; label: string; tab: SidebarTab; soon?: boolean }[] = [
+    { icon: Key, label: "Secrets", tab: "secrets" },
+    { icon: Clock, label: "Activity", tab: "activity", soon: true },
+    { icon: Users, label: "Team", tab: "access", soon: true },
+    { icon: Settings, label: "Settings", tab: "settings", soon: true },
   ];
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* ── Mobile sidebar backdrop ── */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       {/* ── Sidebar ── */}
@@ -256,8 +261,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
         <nav className="flex-1 px-3 space-y-0.5 mt-2">
           {sidebarItems.map(item => (
-            <button key={item.label} onClick={() => setSidebarOpen(false)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
-              item.active ? "bg-[var(--orange-glow)] text-[var(--orange)] font-medium" : item.soon ? "text-[var(--text-ghost)] cursor-default" : "text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
+            <button key={item.label} onClick={() => { setActiveTab(item.tab); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+              activeTab === item.tab ? "bg-[var(--orange-glow)] text-[var(--orange)] font-medium" : item.soon ? "text-[var(--text-ghost)] cursor-default" : "text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
             }`}>
               <item.icon className="w-[18px] h-[18px]" />
               <span>{item.label}</span>
@@ -265,9 +270,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             </button>
           ))}
         </nav>
+
+        {/* CLI hint in sidebar */}
         <div className="p-4 border-t border-[var(--border)]">
-          <div className="text-xs text-[var(--text-ghost)]">Early Access</div>
-          <div className="text-xs text-[var(--text-dim)] mt-1">All features free</div>
+          <div className="text-[10px] text-[var(--text-ghost)] uppercase tracking-wider mb-2">CLI Equivalent</div>
+          <code className="text-[11px] font-mono text-[var(--text-dim)] leading-relaxed block">
+            {activeTab === "secrets" && "meowpass list"}
+            {activeTab === "activity" && "GET /audit-logs"}
+            {activeTab === "access" && "meowpass team list"}
+            {activeTab === "settings" && "meowpass apikey list"}
+          </code>
         </div>
       </aside>
 
@@ -276,11 +288,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         {/* Top bar */}
         <header className="h-[60px] shrink-0 border-b border-[var(--border)] bg-[var(--bg-base)] flex items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3 md:gap-4">
-            {/* Mobile menu toggle */}
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)]">
               <Menu className="w-5 h-5" />
             </button>
-            {/* Vault selector */}
             <div ref={dropdownRef} className="relative">
               <button onClick={() => setVaultDropdown(!vaultDropdown)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-[var(--border-hover)] bg-[var(--bg-card)] text-sm transition-colors">
@@ -323,54 +333,36 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {loading ? <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-[var(--text-dim)]" /></div> :
+
+          /* ── No vaults: onboarding ── */
           !activeVault ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-                <FolderPlus className="w-7 h-7 text-[var(--text-ghost)]" />
-              </div>
-              <h2 className="text-lg font-semibold text-[var(--text-secondary)]">No vaults yet</h2>
-              <p className="text-sm text-[var(--text-dim)] mt-1 mb-4">Create your first vault to start managing secrets</p>
-              <button onClick={() => setModal("add-vault")} style={{ background: "linear-gradient(to right, var(--orange), var(--orange-light))" }} className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:shadow-lg transition-all">
-                Create Vault
-              </button>
-            </div>
-          ) : (
+            <OnboardingEmpty onCreateVault={() => setModal("add-vault")} />
+          ) : activeTab === "secrets" ? (
             <div className="animate-fade-in">
-              {/* Toolbar */}
+              {/* Toolbar — read-only: search + CLI hint instead of Add button */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-5">
                 <div className="relative flex-1 sm:max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-ghost)]" />
                   <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter secrets..."
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm outline-none focus:border-[var(--orange)] transition-colors placeholder:text-[var(--text-ghost)]" />
                 </div>
-                <button onClick={() => { setEditKey(""); setModal("add-secret"); }}
-                  style={{ background: "linear-gradient(to right, var(--orange), var(--orange-light))" }}
-                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium hover:shadow-lg transition-all shrink-0">
-                  <Plus className="w-4 h-4" /> Add Secret
-                </button>
+                <CLIHint cmd={`meowpass set KEY VALUE`} label="Add via CLI" />
               </div>
 
-              {/* Secret list */}
+              {/* Secret list — read-only: reveal, copy, delete. No add/edit. */}
               {secretsLoading ? <div className="flex items-center justify-center h-40"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-dim)]" /></div> :
               filtered.length === 0 ? (
-                <div className="rounded-xl border border-[var(--border)] border-dashed p-12 text-center" style={{ background: "rgba(15,20,32,0.5)" }}>
-                  <Key className="w-8 h-8 text-[var(--text-ghost)] mx-auto mb-3" />
-                  <p className="text-sm text-[var(--text-dim)]">{search ? "No secrets match your filter" : "No secrets in this vault"}</p>
-                  {!search && <p className="text-xs text-[var(--text-ghost)] mt-1">Click &quot;Add Secret&quot; to store your first one</p>}
-                </div>
+                <EmptySecrets search={search} vaultId={activeVault.id} />
               ) : (
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
-                  {/* Table header — hidden on mobile */}
                   <div className="hidden md:grid grid-cols-[1fr_2fr_auto_auto] gap-4 px-5 py-3 border-b border-[var(--border)] text-xs text-[var(--text-ghost)] uppercase tracking-wider font-medium">
                     <span>Key</span>
                     <span>Value</span>
                     <span>Version</span>
                     <span className="text-right">Actions</span>
                   </div>
-                  {/* Rows — grid on desktop, stacked on mobile */}
                   {filtered.map((s, i) => (
                     <div key={s.key_name} className={`md:grid md:grid-cols-[1fr_2fr_auto_auto] md:gap-4 md:items-center px-4 md:px-5 py-3.5 group hover:bg-[var(--bg-elevated)] transition-colors ${i < filtered.length - 1 ? "border-b border-[var(--border)]" : ""}`}>
-                      {/* Mobile: stacked layout */}
                       <div className="flex items-center justify-between md:contents">
                         <div className="flex-1 min-w-0 md:contents">
                           <span className="font-mono text-sm font-medium text-[var(--text)] truncate block">{s.key_name}</span>
@@ -384,19 +376,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         </div>
                         <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] text-[var(--text-dim)] font-mono shrink-0 ml-3 md:ml-0">v{s.version}</span>
                       </div>
-                      {/* Actions — always visible on mobile, hover on desktop */}
+                      {/* Actions: reveal, copy, delete — NO edit */}
                       <div className="flex items-center gap-1 mt-2 md:mt-0 md:justify-end md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        <IconBtn title={revealed[s.key_name] ? "Hide" : "Reveal"} onClick={() => handleReveal(s.key_name)}
+                        <IconBtn title={revealed[s.key_name] ? "Hide" : "Reveal (meowpass get)"} onClick={() => handleReveal(s.key_name)}
                           className={revealed[s.key_name] ? "text-[var(--green)]" : ""}>
                           {revealed[s.key_name] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </IconBtn>
-                        <IconBtn title="Copy" onClick={() => handleCopy(s.key_name)}>
+                        <IconBtn title="Copy to clipboard" onClick={() => handleCopy(s.key_name)}>
                           {copied === s.key_name ? <Check className="w-3.5 h-3.5 text-[var(--green)]" /> : <Copy className="w-3.5 h-3.5" />}
                         </IconBtn>
-                        <IconBtn title="Edit" onClick={() => { setEditKey(s.key_name); setModal("edit-secret"); }}>
-                          <Pencil className="w-3.5 h-3.5" />
-                        </IconBtn>
-                        <IconBtn title="Delete" onClick={() => handleDelete(s.key_name)} className="hover:!text-[var(--red)]">
+                        <IconBtn title="Delete (meowpass delete)" onClick={() => handleDelete(s.key_name)} className="hover:!text-[var(--red)]">
                           <Trash2 className="w-3.5 h-3.5" />
                         </IconBtn>
                       </div>
@@ -404,18 +393,29 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   ))}
                 </div>
               )}
+
+              {/* Vault danger zone */}
+              {activeVault && (
+                <div className="mt-8 pt-6 border-t border-[var(--border)]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-[var(--text-ghost)] uppercase tracking-wider">Danger Zone</div>
+                      <div className="text-xs text-[var(--text-dim)] mt-1">Delete vault &quot;{activeVault.name}&quot; and all secrets</div>
+                    </div>
+                    <button onClick={handleDeleteVault} className="text-xs px-3 py-1.5 rounded-lg border border-[var(--red)]/30 text-[var(--red)] hover:bg-[var(--red)]/10 transition-colors">
+                      Delete Vault
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            /* Placeholder for soon tabs */
+            <ComingSoonTab tab={activeTab} />
           )}
         </main>
       </div>
 
-      {/* ── Modals ── */}
-      {modal === "add-secret" && activeVault && (
-        <SecretModal vaultId={activeVault.id} mode="add" onClose={() => setModal(null)} onSaved={loadSecrets} />
-      )}
-      {modal === "edit-secret" && activeVault && (
-        <SecretModal vaultId={activeVault.id} mode="edit" editKey={editKey} onClose={() => setModal(null)} onSaved={loadSecrets} />
-      )}
       {modal === "add-vault" && (
         <VaultModal onClose={() => setModal(null)} onCreate={handleCreateVault} />
       )}
@@ -424,88 +424,144 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SECRET MODAL
+   ONBOARDING — CLI-first empty state
    ═══════════════════════════════════════════════════════════ */
 
-function SecretModal({ vaultId, mode, editKey, onClose, onSaved }: {
-  vaultId: string; mode: "add" | "edit"; editKey?: string; onClose: () => void; onSaved: () => void;
-}) {
-  const isEdit = mode === "edit";
-  const [keyName, setKeyName] = useState(editKey || "");
-  const [value, setValue] = useState("");
-  const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(isEdit);
-
-  useEffect(() => {
-    if (!isEdit || !editKey) return;
-    (async () => {
-      try {
-        const mk = api.getMasterKey(); if (!mk) return;
-        const masterKey = cr.hexToBytes(mk);
-        const vault = await api.getVault(vaultId);
-        const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
-        const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
-        const secret = await api.getSecret(vaultId, editKey);
-        const encVal = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : cr.base64ToBytes(secret.encrypted_value);
-        setValue(new TextDecoder().decode(await cr.decrypt(encVal, vaultKey)));
-      } catch { /* */ }
-      setLoading(false);
-    })();
-  }, [isEdit, editKey, vaultId]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(""); setBusy(true);
-    try {
-      if (!keyName.trim()) throw new Error("Key name required");
-      const mk = api.getMasterKey(); if (!mk) throw new Error("Session expired");
-      const masterKey = cr.hexToBytes(mk);
-      const vault = await api.getVault(vaultId);
-      const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
-      const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
-      const encrypted = await cr.encrypt(new TextEncoder().encode(value), vaultKey);
-      await api.setSecret(vaultId, keyName.trim(), Array.from(encrypted));
-      onSaved(); onClose();
-    } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed"); }
-    setBusy(false);
-  }
-
+function OnboardingEmpty({ onCreateVault }: { onCreateVault: () => void }) {
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black animate-fade-in">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
-          <h2 className="text-base font-semibold">{isEdit ? "Edit Secret" : "Add Secret"}</h2>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"><X className="w-4 h-4" /></button>
-        </div>
-        {loading ? <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-dim)]" /></div> :
-          <form onSubmit={submit} className="p-6 space-y-5">
-            <Input label="Key Name" value={keyName} onChange={setKeyName} placeholder="STRIPE_SECRET_KEY" disabled={isEdit} mono />
-            <div>
-              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">Value</label>
-              <div className="relative">
-                <textarea value={value} onChange={e => setValue(e.target.value)} placeholder="Enter secret value..."
-                  rows={4} className="w-full px-3.5 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm font-mono outline-none focus:border-[var(--orange)] transition-colors resize-y pr-10"
-                  style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties} />
-                <button type="button" onClick={() => setShow(!show)} className="absolute top-3 right-3 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors">
-                  {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            {error && <ErrorMsg msg={error} />}
-            <div className="flex gap-3 pt-1">
-              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors">Cancel</button>
-              <PrimaryBtn disabled={busy} className="flex-1">{busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Encrypting...</> : isEdit ? "Update" : "Save"}</PrimaryBtn>
-            </div>
-          </form>
-        }
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
+      <div className="w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-6">
+        <Terminal className="w-7 h-7 text-[var(--orange)]" />
       </div>
-    </ModalOverlay>
+      <h2 className="text-xl font-semibold text-[var(--text)]">Welcome to MeowPass</h2>
+      <p className="text-sm text-[var(--text-secondary)] mt-2 max-w-md">
+        Your secrets live in the terminal. This dashboard is your control panel.
+      </p>
+
+      <div className="mt-8 w-full max-w-lg">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-5 text-left">
+          <div className="text-xs text-[var(--text-ghost)] uppercase tracking-wider mb-3">Get started with the CLI</div>
+          <div className="space-y-2 font-mono text-sm">
+            <div className="flex gap-3">
+              <span className="text-[var(--orange)] select-none w-4">$</span>
+              <span className="text-[var(--text)]">brew install meowrithm/tap/meowpass</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-[var(--orange)] select-none w-4">$</span>
+              <span className="text-[var(--text)]">meowpass login</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="text-[var(--orange)] select-none w-4">$</span>
+              <span className="text-[var(--text)]">meowpass init</span>
+            </div>
+          </div>
+          <p className="text-xs text-[var(--text-dim)] mt-4">
+            After <code className="text-[var(--orange)]">meowpass init</code>, your secrets will appear here automatically.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center gap-3">
+        <button onClick={onCreateVault} style={{ background: "linear-gradient(to right, var(--orange), var(--orange-light))" }} className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:shadow-lg transition-all">
+          Or create a vault manually
+        </button>
+        <a href="https://meowpass.dev/docs/cli" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-[var(--text-dim)] hover:text-[var(--orange)] transition-colors">
+          CLI docs <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+    </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════
-   VAULT MODAL
+   EMPTY SECRETS — guide to CLI
+   ═══════════════════════════════════════════════════════════ */
+
+function EmptySecrets({ search, vaultId }: { search: string; vaultId: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] border-dashed p-12 text-center" style={{ background: "rgba(15,20,32,0.5)" }}>
+      <Key className="w-8 h-8 text-[var(--text-ghost)] mx-auto mb-3" />
+      {search ? (
+        <p className="text-sm text-[var(--text-dim)]">No secrets match your filter</p>
+      ) : (
+        <>
+          <p className="text-sm text-[var(--text-dim)]">No secrets in this vault yet</p>
+          <div className="mt-4 inline-block rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-4 text-left">
+            <div className="text-xs text-[var(--text-ghost)] mb-2">Add secrets via CLI:</div>
+            <div className="font-mono text-xs space-y-1.5">
+              <div><span className="text-[var(--orange)]">$</span> <span className="text-[var(--text)]">meowpass set STRIPE_KEY sk_live_... --vault {vaultId.slice(0, 8)}...</span></div>
+              <div><span className="text-[var(--orange)]">$</span> <span className="text-[var(--text)]">meowpass push --vault {vaultId.slice(0, 8)}...</span></div>
+            </div>
+            <div className="text-xs text-[var(--text-ghost)] mt-2">Or use <code className="text-[var(--orange)]">meowpass init</code> to import your .env</div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMING SOON TABS
+   ═══════════════════════════════════════════════════════════ */
+
+function ComingSoonTab({ tab }: { tab: SidebarTab }) {
+  const info: Record<SidebarTab, { title: string; desc: string; cli: string }> = {
+    secrets: { title: "", desc: "", cli: "" },
+    activity: {
+      title: "Activity Log",
+      desc: "Track who accessed, created, or modified secrets. Filterable by vault, user, and date.",
+      cli: "Audit logs are available via the API: GET /audit-logs?vault_id=<id>",
+    },
+    access: {
+      title: "Team Management",
+      desc: "Manage team members, roles, and vault sharing. Invite developers and control access.",
+      cli: "meowpass team list\nmeowpass team invite EMAIL --team ID\nmeowpass share VAULT_ID --team ID",
+    },
+    settings: {
+      title: "Settings",
+      desc: "Manage API keys, view your plan, and account settings.",
+      cli: "meowpass apikey list\nmeowpass apikey create NAME\nmeowpass whoami",
+    },
+  };
+
+  const { title, desc, cli } = info[tab];
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in">
+      <div className="text-xs px-3 py-1 rounded-full bg-[var(--orange-glow)] text-[var(--orange)] font-medium mb-4">Coming Soon</div>
+      <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
+      <p className="text-sm text-[var(--text-dim)] mt-2 max-w-md">{desc}</p>
+      {cli && (
+        <div className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] p-4 text-left max-w-md w-full">
+          <div className="text-xs text-[var(--text-ghost)] mb-2">Available now via CLI:</div>
+          <div className="font-mono text-xs text-[var(--text)] whitespace-pre leading-relaxed">{cli}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CLI HINT COMPONENT
+   ═══════════════════════════════════════════════════════════ */
+
+function CLIHint({ cmd, label }: { cmd: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-xs hover:border-[var(--orange)]/50 transition-colors group shrink-0"
+      title={`Copy: ${cmd}`}
+    >
+      <Terminal className="w-3.5 h-3.5 text-[var(--text-ghost)] group-hover:text-[var(--orange)] transition-colors" />
+      <span className="text-[var(--text-dim)] group-hover:text-[var(--text)] transition-colors">{label}</span>
+      {copied ? <Check className="w-3 h-3 text-[var(--green)]" /> : <Copy className="w-3 h-3 text-[var(--text-ghost)]" />}
+    </button>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VAULT MODAL (keep — creating vaults is fine in web)
    ═══════════════════════════════════════════════════════════ */
 
 function VaultModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => Promise<void> }) {
@@ -526,6 +582,7 @@ function VaultModal({ onClose, onCreate }: { onClose: () => void; onCreate: (nam
         </div>
         <form onSubmit={submit} className="p-6 space-y-5">
           <Input label="Vault Name" value={name} onChange={setName} placeholder="my-project" autoFocus />
+          <p className="text-xs text-[var(--text-ghost)]">CLI equivalent: <code className="text-[var(--orange)]">meowpass vault create {name || "NAME"}</code></p>
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors">Cancel</button>
             <PrimaryBtn disabled={busy || !name.trim()} className="flex-1">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}</PrimaryBtn>
