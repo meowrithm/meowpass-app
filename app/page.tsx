@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import {
   Key, Lock, Plus, Copy, Check, Trash2, LogOut, Loader2, Eye, EyeOff,
-  Search, ChevronDown, Shield, Clock, Users, Settings, Pencil, X, FolderPlus
+  Search, ChevronDown, Shield, Clock, Users, Settings, Pencil, X, FolderPlus, Menu
 } from "lucide-react";
 import * as api from "@/lib/api";
 import * as cr from "@/lib/crypto";
@@ -145,6 +145,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState("");
   const [vaultDropdown, setVaultDropdown] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -239,15 +240,23 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* ── Mobile sidebar backdrop ── */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+
       {/* ── Sidebar ── */}
-      <aside className="w-[220px] shrink-0 bg-[var(--bg-base)] border-r border-[var(--border)] flex flex-col">
-        <div className="p-5 flex items-center gap-3">
-          <Image src="/images/logo-192.png" alt="" width={32} height={32} className="rounded-lg" />
-          <span className="font-bold text-base tracking-tight">MeowPass</span>
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-[220px] shrink-0 bg-[var(--bg-base)] border-r border-[var(--border)] flex flex-col transform transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+        <div className="p-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Image src="/images/logo-192.png" alt="" width={32} height={32} className="rounded-lg" />
+            <span className="font-bold text-base tracking-tight">MeowPass</span>
+          </div>
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)]">
+            <X className="w-4 h-4" />
+          </button>
         </div>
         <nav className="flex-1 px-3 space-y-0.5 mt-2">
           {sidebarItems.map(item => (
-            <button key={item.label} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+            <button key={item.label} onClick={() => setSidebarOpen(false)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
               item.active ? "bg-[var(--orange-glow)] text-[var(--orange)] font-medium" : item.soon ? "text-[var(--text-ghost)] cursor-default" : "text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
             }`}>
               <item.icon className="w-[18px] h-[18px]" />
@@ -265,8 +274,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       {/* ── Main ── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-[60px] shrink-0 border-b border-[var(--border)] bg-[var(--bg-base)] flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
+        <header className="h-[60px] shrink-0 border-b border-[var(--border)] bg-[var(--bg-base)] flex items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-3 md:gap-4">
+            {/* Mobile menu toggle */}
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)]">
+              <Menu className="w-5 h-5" />
+            </button>
             {/* Vault selector */}
             <div ref={dropdownRef} className="relative">
               <button onClick={() => setVaultDropdown(!vaultDropdown)}
@@ -294,11 +307,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <span className="text-xs text-[var(--text-ghost)]">{secrets.length} secret{secrets.length !== 1 ? "s" : ""}</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             {user && (
               <>
                 <span className="text-xs px-2 py-1 rounded-md bg-[var(--orange-glow)] text-[var(--orange)] capitalize font-medium">{user.subscription_tier}</span>
-                <span className="text-xs text-[var(--text-dim)]">{user.email}</span>
+                <span className="text-xs text-[var(--text-dim)] hidden md:inline">{user.email}</span>
               </>
             )}
             <button onClick={onLogout} className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors" title="Log out">
@@ -308,7 +321,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {loading ? <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-[var(--text-dim)]" /></div> :
           !activeVault ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -324,14 +337,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           ) : (
             <div className="animate-fade-in">
               {/* Toolbar */}
-              <div className="flex items-center justify-between mb-5">
-                <div className="relative flex-1 max-w-sm">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-5">
+                <div className="relative flex-1 sm:max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-ghost)]" />
                   <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter secrets..."
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm outline-none focus:border-[var(--orange)]/50 transition-colors placeholder:text-[var(--text-ghost)]" />
                 </div>
                 <button onClick={() => { setEditKey(""); setModal("add-secret"); }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/20 transition-all">
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/20 transition-all shrink-0">
                   <Plus className="w-4 h-4" /> Add Secret
                 </button>
               </div>
@@ -346,26 +359,32 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </div>
               ) : (
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
-                  {/* Table header */}
-                  <div className="grid grid-cols-[1fr_2fr_auto_auto] gap-4 px-5 py-3 border-b border-[var(--border)] text-xs text-[var(--text-ghost)] uppercase tracking-wider font-medium">
+                  {/* Table header — hidden on mobile */}
+                  <div className="hidden md:grid grid-cols-[1fr_2fr_auto_auto] gap-4 px-5 py-3 border-b border-[var(--border)] text-xs text-[var(--text-ghost)] uppercase tracking-wider font-medium">
                     <span>Key</span>
                     <span>Value</span>
                     <span>Version</span>
                     <span className="text-right">Actions</span>
                   </div>
-                  {/* Rows */}
+                  {/* Rows — grid on desktop, stacked on mobile */}
                   {filtered.map((s, i) => (
-                    <div key={s.key_name} className={`grid grid-cols-[1fr_2fr_auto_auto] gap-4 items-center px-5 py-3.5 group hover:bg-[var(--bg-elevated)]/50 transition-colors ${i < filtered.length - 1 ? "border-b border-[var(--border)]/50" : ""}`}>
-                      <span className="font-mono text-sm font-medium text-[var(--text)] truncate">{s.key_name}</span>
-                      <div className="font-mono text-sm truncate">
-                        {revealed[s.key_name] ? (
-                          <span className="text-[var(--green)] break-all">{revealed[s.key_name]}</span>
-                        ) : (
-                          <span className="text-[var(--text-ghost)] tracking-widest select-none">{"••••••••••••"}</span>
-                        )}
+                    <div key={s.key_name} className={`md:grid md:grid-cols-[1fr_2fr_auto_auto] md:gap-4 md:items-center px-4 md:px-5 py-3.5 group hover:bg-[var(--bg-elevated)]/50 transition-colors ${i < filtered.length - 1 ? "border-b border-[var(--border)]/50" : ""}`}>
+                      {/* Mobile: stacked layout */}
+                      <div className="flex items-center justify-between md:contents">
+                        <div className="flex-1 min-w-0 md:contents">
+                          <span className="font-mono text-sm font-medium text-[var(--text)] truncate block">{s.key_name}</span>
+                          <div className="font-mono text-sm truncate mt-1 md:mt-0">
+                            {revealed[s.key_name] ? (
+                              <span className="text-[var(--green)] break-all">{revealed[s.key_name]}</span>
+                            ) : (
+                              <span className="text-[var(--text-ghost)] tracking-widest select-none">{"••••••••••••"}</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] text-[var(--text-dim)] font-mono shrink-0 ml-3 md:ml-0">v{s.version}</span>
                       </div>
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] text-[var(--text-dim)] font-mono">v{s.version}</span>
-                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Actions — always visible on mobile, hover on desktop */}
+                      <div className="flex items-center gap-1 mt-2 md:mt-0 md:justify-end md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <IconBtn title={revealed[s.key_name] ? "Hide" : "Reveal"} onClick={() => handleReveal(s.key_name)}
                           className={revealed[s.key_name] ? "text-[var(--green)]" : ""}>
                           {revealed[s.key_name] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
