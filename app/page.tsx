@@ -65,11 +65,11 @@ function LoginView({ onSuccess }: { onSuccess: () => void }) {
     <CenterShell>
       <div className="animate-fade-in">
         <div className="text-center mb-8">
-          <Image src="/images/logo-192.png" alt="" width={56} height={56} className="rounded-2xl mx-auto mb-4 ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--bg-deep)]" />
+          <Image src="/images/logo-192.png" alt="" width={56} height={56} className="rounded-2xl mx-auto mb-4" style={{ boxShadow: "0 0 0 2px var(--bg-deep), 0 0 0 4px var(--border)" }} />
           <h1 className="text-2xl font-bold tracking-tight">MeowPass</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">E2E encrypted secret vault</p>
         </div>
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl shadow-black/40">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl shadow-black">
           <form onSubmit={submit} className="space-y-5">
             {mode === "register" && <Input label="Name" value={name} onChange={setName} placeholder="Your name" />}
             <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" autoFocus />
@@ -116,7 +116,7 @@ function UnlockView({ onSuccess }: { onSuccess: () => void }) {
           <h1 className="text-2xl font-bold tracking-tight">Unlock Vault</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Enter your master password to decrypt</p>
         </div>
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl shadow-black/40">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl shadow-black">
           <form onSubmit={submit} className="space-y-5">
             <Input label="Master Password" type="password" value={pw} onChange={setPw} placeholder="Your master password" autoFocus />
             {error && <ErrorMsg msg={error} />}
@@ -289,7 +289,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <ChevronDown className="w-3.5 h-3.5 text-[var(--text-dim)]" />
               </button>
               {vaultDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-56 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl shadow-black/50 z-50 overflow-hidden animate-fade-in">
+                <div className="absolute top-full left-0 mt-1 w-56 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl shadow-black z-50 overflow-hidden animate-fade-in">
                   {vaults.map(v => (
                     <button key={v.id} onClick={() => { setActiveVault(v); setVaultDropdown(false); }}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-[var(--bg-card)] transition-colors ${v.id === activeVault?.id ? "text-[var(--orange)]" : "text-[var(--text-secondary)]"}`}>
@@ -330,7 +330,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               </div>
               <h2 className="text-lg font-semibold text-[var(--text-secondary)]">No vaults yet</h2>
               <p className="text-sm text-[var(--text-dim)] mt-1 mb-4">Create your first vault to start managing secrets</p>
-              <button onClick={() => setModal("add-vault")} className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/20 transition-all">
+              <button onClick={() => setModal("add-vault")} style={{ background: "linear-gradient(to right, var(--orange), var(--orange-light))" }} className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:shadow-lg transition-all">
                 Create Vault
               </button>
             </div>
@@ -341,10 +341,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <div className="relative flex-1 sm:max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-ghost)]" />
                   <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter secrets..."
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm outline-none focus:border-[var(--orange)]/50 transition-colors placeholder:text-[var(--text-ghost)]" />
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm outline-none focus:border-[var(--orange)] transition-colors placeholder:text-[var(--text-ghost)]" />
                 </div>
                 <button onClick={() => { setEditKey(""); setModal("add-secret"); }}
-                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/20 transition-all shrink-0">
+                  style={{ background: "linear-gradient(to right, var(--orange), var(--orange-light))" }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium hover:shadow-lg transition-all shrink-0">
                   <Plus className="w-4 h-4" /> Add Secret
                 </button>
               </div>
@@ -352,7 +353,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               {/* Secret list */}
               {secretsLoading ? <div className="flex items-center justify-center h-40"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-dim)]" /></div> :
               filtered.length === 0 ? (
-                <div className="rounded-xl border border-[var(--border)] border-dashed bg-[var(--bg-card)]/50 p-12 text-center">
+                <div className="rounded-xl border border-[var(--border)] border-dashed p-12 text-center" style={{ background: "rgba(15,20,32,0.5)" }}>
                   <Key className="w-8 h-8 text-[var(--text-ghost)] mx-auto mb-3" />
                   <p className="text-sm text-[var(--text-dim)]">{search ? "No secrets match your filter" : "No secrets in this vault"}</p>
                   {!search && <p className="text-xs text-[var(--text-ghost)] mt-1">Click &quot;Add Secret&quot; to store your first one</p>}
@@ -368,7 +369,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   </div>
                   {/* Rows — grid on desktop, stacked on mobile */}
                   {filtered.map((s, i) => (
-                    <div key={s.key_name} className={`md:grid md:grid-cols-[1fr_2fr_auto_auto] md:gap-4 md:items-center px-4 md:px-5 py-3.5 group hover:bg-[var(--bg-elevated)]/50 transition-colors ${i < filtered.length - 1 ? "border-b border-[var(--border)]/50" : ""}`}>
+                    <div key={s.key_name} className={`md:grid md:grid-cols-[1fr_2fr_auto_auto] md:gap-4 md:items-center px-4 md:px-5 py-3.5 group hover:bg-[var(--bg-elevated)] transition-colors ${i < filtered.length - 1 ? "border-b border-[var(--border)]" : ""}`}>
                       {/* Mobile: stacked layout */}
                       <div className="flex items-center justify-between md:contents">
                         <div className="flex-1 min-w-0 md:contents">
@@ -472,7 +473,7 @@ function SecretModal({ vaultId, mode, editKey, onClose, onSaved }: {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black/60 animate-fade-in">
+      <div className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black animate-fade-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
           <h2 className="text-base font-semibold">{isEdit ? "Edit Secret" : "Add Secret"}</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"><X className="w-4 h-4" /></button>
@@ -484,7 +485,7 @@ function SecretModal({ vaultId, mode, editKey, onClose, onSaved }: {
               <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">Value</label>
               <div className="relative">
                 <textarea value={value} onChange={e => setValue(e.target.value)} placeholder="Enter secret value..."
-                  rows={4} className="w-full px-3.5 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm font-mono outline-none focus:border-[var(--orange)]/50 transition-colors resize-y pr-10"
+                  rows={4} className="w-full px-3.5 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm font-mono outline-none focus:border-[var(--orange)] transition-colors resize-y pr-10"
                   style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties} />
                 <button type="button" onClick={() => setShow(!show)} className="absolute top-3 right-3 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors">
                   {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -518,7 +519,7 @@ function VaultModal({ onClose, onCreate }: { onClose: () => void; onCreate: (nam
   }
   return (
     <ModalOverlay onClose={onClose}>
-      <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black/60 animate-fade-in">
+      <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black animate-fade-in">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
           <h2 className="text-base font-semibold">Create Vault</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"><X className="w-4 h-4" /></button>
@@ -559,7 +560,7 @@ function Input({ label, type = "text", value, onChange, placeholder, disabled, m
     <div>
       <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} required disabled={disabled} autoFocus={autoFocus}
-        className={`w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm outline-none focus:border-[var(--orange)]/50 transition-colors disabled:opacity-40 placeholder:text-[var(--text-ghost)] ${mono ? "font-mono" : ""}`} />
+        className={`w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm outline-none focus:border-[var(--orange)] transition-colors disabled:opacity-40 placeholder:text-[var(--text-ghost)] ${mono ? "font-mono" : ""}`} />
     </div>
   );
 }
@@ -567,7 +568,8 @@ function Input({ label, type = "text", value, onChange, placeholder, disabled, m
 function PrimaryBtn({ children, disabled, className = "" }: { children: React.ReactNode; disabled?: boolean; className?: string }) {
   return (
     <button type="submit" disabled={disabled}
-      className={`flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[var(--orange)]/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${className}`}>
+      style={{ background: "linear-gradient(to right, var(--orange), var(--orange-light))" }}
+      className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold hover:shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed ${className}`}>
       {children}
     </button>
   );
@@ -583,5 +585,5 @@ function IconBtn({ children, title, onClick, className = "" }: { children: React
 }
 
 function ErrorMsg({ msg }: { msg: string }) {
-  return <div className="text-sm text-[var(--red)] bg-[var(--red)]/8 border border-[var(--red)]/15 rounded-xl px-4 py-3">{msg}</div>;
+  return <div className="text-sm text-[var(--red)] rounded-xl px-4 py-3 border" style={{ background: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.15)" }}>{msg}</div>;
 }
