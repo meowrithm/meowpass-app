@@ -1,422 +1,568 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { Shield, Lock, Plus, Copy, Check, Trash2, ArrowLeft, LogOut, Key, Loader2, Eye, EyeOff } from "lucide-react";
+import {
+  Key, Lock, Plus, Copy, Check, Trash2, LogOut, Loader2, Eye, EyeOff,
+  Search, ChevronDown, Shield, Clock, Users, Settings, Pencil, X, FolderPlus
+} from "lucide-react";
 import * as api from "@/lib/api";
-import * as crypto from "@/lib/crypto";
+import * as cr from "@/lib/crypto";
 
-type View = "login" | "unlock" | "vaults" | "secrets" | "secret-form";
-interface ViewParams { vaultId?: string; vaultName?: string; mode?: "add" | "edit"; keyName?: string; }
+/* ═══════════════════════════════════════════════════════════
+   TYPES
+   ═══════════════════════════════════════════════════════════ */
+
+type View = "login" | "unlock" | "dashboard";
+type Modal = null | "add-secret" | "edit-secret" | "add-vault";
+interface Vault { id: string; name: string; created_at: string; }
+interface Secret { key_name: string; version: number; }
+interface User { email: string; name: string; subscription_tier: string; }
+
+/* ═══════════════════════════════════════════════════════════
+   APP ROOT
+   ═══════════════════════════════════════════════════════════ */
 
 export default function App() {
   const [view, setView] = useState<View>("login");
-  const [params, setParams] = useState<ViewParams>({});
-  const [loading, setLoading] = useState(true);
-
-  const navigate = useCallback((v: View, p: ViewParams = {}) => { setView(v); setParams(p); }, []);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (api.hasToken()) {
-      if (api.getMasterKey()) navigate("vaults");
-      else navigate("unlock");
-    } else {
-      navigate("login");
-    }
-    setLoading(false);
-  }, [navigate]);
+    if (api.hasToken()) setView(api.getMasterKey() ? "dashboard" : "unlock");
+    else setView("login");
+    setReady(true);
+  }, []);
 
-  if (loading) return <Shell><div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-[var(--orange)]" /></div></Shell>;
+  if (!ready) return <CenterShell><Loader2 className="w-6 h-6 animate-spin text-[var(--orange)]" /></CenterShell>;
 
-  return (
-    <Shell>
-      {view === "login" && <LoginView navigate={navigate} />}
-      {view === "unlock" && <UnlockView navigate={navigate} />}
-      {view === "vaults" && <VaultsView navigate={navigate} />}
-      {view === "secrets" && <SecretsView navigate={navigate} params={params} />}
-      {view === "secret-form" && <SecretFormView navigate={navigate} params={params} />}
-    </Shell>
-  );
+  if (view === "login") return <LoginView onSuccess={() => setView("unlock")} />;
+  if (view === "unlock") return <UnlockView onSuccess={() => setView("dashboard")} />;
+  return <Dashboard onLogout={() => { api.clearAll(); setView("login"); }} />;
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen flex items-start justify-center p-4 pt-12 md:pt-20">
-      <div className="w-full max-w-lg">{children}</div>
-    </div>
-  );
-}
+/* ═══════════════════════════════════════════════════════════
+   LOGIN
+   ═══════════════════════════════════════════════════════════ */
 
-// ── Login ──
-
-function LoginView({ navigate }: { navigate: (v: View, p?: ViewParams) => void }) {
+function LoginView({ onSuccess }: { onSuccess: () => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState(""); const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(""); setBusy(true);
     try {
-      const data = mode === "register"
-        ? await api.register(email, name, password)
-        : await api.login(email, password);
+      const data = mode === "register" ? await api.register(email, name, password) : await api.login(email, password);
       api.setToken(data.token);
       if (data.user?.key_salt) api.setSalt(data.user.key_salt);
-      navigate("unlock");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally { setBusy(false); }
+      onSuccess();
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed"); }
+    finally { setBusy(false); }
   }
 
   return (
-    <div>
-      <Header />
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "register" && <Field label="Name" value={name} onChange={setName} placeholder="Your name" />}
-          <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-          <Field label="Password" type="password" value={password} onChange={setPassword} placeholder={mode === "register" ? "Create a password" : "Your password"} />
-          {error && <ErrorBox msg={error} />}
-          <Btn disabled={busy}>{busy ? "Loading..." : mode === "register" ? "Create Account" : "Sign In"}</Btn>
-        </form>
-        <p className="text-center text-sm text-[var(--text-muted)] mt-4">
-          {mode === "login" ? <>Don&apos;t have an account? <a href="#" onClick={(e) => { e.preventDefault(); setMode("register"); setError(""); }} className="text-[var(--orange)] hover:underline">Sign up</a></> : <>Already have an account? <a href="#" onClick={(e) => { e.preventDefault(); setMode("login"); setError(""); }} className="text-[var(--orange)] hover:underline">Sign in</a></>}
-        </p>
-      </Card>
-    </div>
+    <CenterShell>
+      <div className="animate-fade-in">
+        <div className="text-center mb-8">
+          <Image src="/images/logo-192.png" alt="" width={56} height={56} className="rounded-2xl mx-auto mb-4 ring-2 ring-[var(--border)] ring-offset-2 ring-offset-[var(--bg-deep)]" />
+          <h1 className="text-2xl font-bold tracking-tight">MeowPass</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">E2E encrypted secret vault</p>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl shadow-black/40">
+          <form onSubmit={submit} className="space-y-5">
+            {mode === "register" && <Input label="Name" value={name} onChange={setName} placeholder="Your name" />}
+            <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" autoFocus />
+            <Input label="Password" type="password" value={password} onChange={setPassword} placeholder={mode === "register" ? "Create a password" : "Enter password"} />
+            {error && <ErrorMsg msg={error} />}
+            <PrimaryBtn disabled={busy}>{busy ? <><Loader2 className="w-4 h-4 animate-spin" /> {mode === "register" ? "Creating..." : "Signing in..."}</> : mode === "register" ? "Create Account" : "Sign In"}</PrimaryBtn>
+          </form>
+          <p className="text-center text-sm text-[var(--text-dim)] mt-5">
+            {mode === "login" ? <>New here? <button onClick={() => { setMode("register"); setError(""); }} className="text-[var(--orange)] hover:underline">Create account</button></> : <>Have an account? <button onClick={() => { setMode("login"); setError(""); }} className="text-[var(--orange)] hover:underline">Sign in</button></>}
+          </p>
+        </div>
+      </div>
+    </CenterShell>
   );
 }
 
-// ── Unlock ──
+/* ═══════════════════════════════════════════════════════════
+   UNLOCK
+   ═══════════════════════════════════════════════════════════ */
 
-function UnlockView({ navigate }: { navigate: (v: View) => void }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+function UnlockView({ onSuccess }: { onSuccess: () => void }) {
+  const [pw, setPw] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(""); setBusy(true);
     try {
       let salt = api.getSalt();
-      if (!salt) {
-        const me = await api.getMe();
-        if (me?.key_salt) { salt = me.key_salt; api.setSalt(salt!); }
-      }
-      if (!salt) throw new Error("No salt found. Please login via CLI first.");
-      const saltBytes = crypto.base64ToBytes(salt);
-      const key = await crypto.deriveKey(password, saltBytes);
-      api.setMasterKey(crypto.bytesToHex(key));
-      navigate("vaults");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to derive key");
-    } finally { setBusy(false); }
+      if (!salt) { const me = await api.getMe(); if (me?.key_salt) { salt = me.key_salt; api.setSalt(salt!); } }
+      if (!salt) throw new Error("No encryption key found. Please login via CLI first (meowpass login).");
+      const key = await cr.deriveKey(pw, cr.base64ToBytes(salt));
+      api.setMasterKey(cr.bytesToHex(key));
+      onSuccess();
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed"); }
+    finally { setBusy(false); }
   }
 
   return (
-    <div>
-      <Header subtitle="Enter your master password to decrypt secrets." />
-      <Card>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Master Password" type="password" value={password} onChange={setPassword} placeholder="Your master password" autoFocus />
-          {error && <ErrorBox msg={error} />}
-          <Btn disabled={busy}>{busy ? "Deriving key..." : "Unlock"}</Btn>
-        </form>
-      </Card>
-    </div>
+    <CenterShell>
+      <div className="animate-fade-in">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-7 h-7 text-[var(--orange)]" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Unlock Vault</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">Enter your master password to decrypt</p>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-8 shadow-2xl shadow-black/40">
+          <form onSubmit={submit} className="space-y-5">
+            <Input label="Master Password" type="password" value={pw} onChange={setPw} placeholder="Your master password" autoFocus />
+            {error && <ErrorMsg msg={error} />}
+            <PrimaryBtn disabled={busy}>{busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Deriving key...</> : <><Lock className="w-4 h-4" /> Unlock</>}</PrimaryBtn>
+          </form>
+        </div>
+      </div>
+    </CenterShell>
   );
 }
 
-// ── Vaults ──
+/* ═══════════════════════════════════════════════════════════
+   DASHBOARD
+   ═══════════════════════════════════════════════════════════ */
 
-function VaultsView({ navigate }: { navigate: (v: View, p?: ViewParams) => void }) {
-  const [vaults, setVaults] = useState<Array<{ id: string; name: string; created_at: string }>>([]);
+function Dashboard({ onLogout }: { onLogout: () => void }) {
+  const [vaults, setVaults] = useState<Vault[]>([]);
+  const [activeVault, setActiveVault] = useState<Vault | null>(null);
+  const [secrets, setSecrets] = useState<Secret[]>([]);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [user, setUser] = useState<{ email: string; subscription_tier: string } | null>(null);
+  const [secretsLoading, setSecretsLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [modal, setModal] = useState<Modal>(null);
+  const [editKey, setEditKey] = useState("");
+  const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState("");
+  const [vaultDropdown, setVaultDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) { if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setVaultDropdown(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Load vaults + user
+  const loadVaults = useCallback(async () => {
     setLoading(true);
     try {
       const [v, me] = await Promise.all([api.listVaults(), api.getMe()]);
       setVaults(v || []);
       setUser(me);
-    } catch { /* ignore */ }
+      if (!activeVault && v?.length > 0) setActiveVault(v[0]);
+    } catch { /* */ }
     setLoading(false);
-  }, []);
+  }, [activeVault]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadVaults(); }, []);// eslint-disable-line
 
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setCreating(true);
-    try {
-      const mk = api.getMasterKey();
-      if (!mk) { navigate("unlock"); return; }
-      const masterKey = crypto.hexToBytes(mk);
-      const vaultKey = crypto.generateVaultKey();
-      const encKey = await crypto.encryptVaultKey(vaultKey, masterKey);
-      await api.createVault(newName.trim(), Array.from(encKey));
-      setNewName("");
-      load();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed");
-    }
-    setCreating(false);
+  // Load secrets when vault changes
+  const loadSecrets = useCallback(async () => {
+    if (!activeVault) return;
+    setSecretsLoading(true);
+    try { setSecrets(await api.listSecrets(activeVault.id) || []); }
+    catch { /* */ }
+    setSecretsLoading(false);
+    setRevealed({});
+  }, [activeVault]);
+
+  useEffect(() => { loadSecrets(); }, [loadSecrets]);
+
+  // Decrypt helper
+  async function decryptValue(keyName: string): Promise<string> {
+    if (!activeVault) throw new Error("No vault");
+    const mk = api.getMasterKey();
+    if (!mk) throw new Error("Session expired");
+    const masterKey = cr.hexToBytes(mk);
+    const vault = await api.getVault(activeVault.id);
+    const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
+    const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
+    const secret = await api.getSecret(activeVault.id, keyName);
+    const encVal = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : cr.base64ToBytes(secret.encrypted_value);
+    return new TextDecoder().decode(await cr.decrypt(encVal, vaultKey));
   }
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Image src="/images/logo-192.png" alt="MeowPass" width={28} height={28} className="rounded-lg" />
-          <h1 className="text-lg font-bold">Vaults</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {user && <span className="text-xs px-2 py-1 rounded-full bg-[var(--orange)]/20 text-[var(--orange)] capitalize">{user.subscription_tier}</span>}
-          <button onClick={() => { api.clearAll(); navigate("login"); }} className="p-2 rounded-lg hover:bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors" title="Log out">
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      <Card>
-        {loading ? <div className="text-center py-8 text-[var(--text-muted)]"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div> :
-          vaults.length === 0 ? <p className="text-center py-8 text-[var(--text-muted)] text-sm">No vaults yet. Create one below.</p> :
-          <div className="space-y-2">
-            {vaults.map(v => (
-              <button key={v.id} onClick={() => navigate("secrets", { vaultId: v.id, vaultName: v.name })}
-                className="w-full flex items-center justify-between p-3 rounded-lg border border-[var(--border)] hover:border-[var(--orange)]/30 hover:bg-[var(--bg-card)] transition-all text-left">
-                <div>
-                  <div className="font-medium text-sm">{v.name}</div>
-                  <div className="text-xs text-[var(--text-muted)]">{v.created_at?.slice(0, 10)}</div>
-                </div>
-                <ArrowLeft className="w-4 h-4 text-[var(--text-muted)] rotate-180" />
-              </button>
-            ))}
-          </div>
-        }
-      </Card>
-
-      <div className="flex gap-2 mt-4">
-        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="New vault name"
-          onKeyDown={e => e.key === "Enter" && handleCreate()}
-          className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm outline-none focus:border-[var(--orange)] transition-colors" />
-        <button onClick={handleCreate} disabled={creating}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/25 transition-all disabled:opacity-50">
-          {creating ? "..." : "Create"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Secrets ──
-
-function SecretsView({ navigate, params }: { navigate: (v: View, p?: ViewParams) => void; params: ViewParams }) {
-  const { vaultId, vaultName } = params;
-  const [secrets, setSecrets] = useState<Array<{ key_name: string; version: number }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState("");
-
-  const load = useCallback(async () => {
-    if (!vaultId) return;
-    setLoading(true);
-    try { setSecrets(await api.listSecrets(vaultId) || []); } catch { /* ignore */ }
-    setLoading(false);
-  }, [vaultId]);
-
-  useEffect(() => { load(); }, [load]);
+  async function handleReveal(keyName: string) {
+    if (revealed[keyName]) { setRevealed(r => { const n = { ...r }; delete n[keyName]; return n; }); return; }
+    try {
+      const val = await decryptValue(keyName);
+      setRevealed(r => ({ ...r, [keyName]: val }));
+      setTimeout(() => setRevealed(r => { const n = { ...r }; delete n[keyName]; return n; }), 10000);
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : "Decrypt failed"); }
+  }
 
   async function handleCopy(keyName: string) {
-    if (!vaultId) return;
     try {
-      const mk = api.getMasterKey();
-      if (!mk) { navigate("unlock"); return; }
-      const masterKey = crypto.hexToBytes(mk);
-      const vault = await api.getVault(vaultId);
-      const encKeyBytes = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : crypto.base64ToBytes(vault.encrypted_key);
-      const vaultKey = await crypto.decryptVaultKey(encKeyBytes, masterKey);
-      const secret = await api.getSecret(vaultId, keyName);
-      const encBytes = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : crypto.base64ToBytes(secret.encrypted_value);
-      const plaintext = await crypto.decrypt(encBytes, vaultKey);
-      await navigator.clipboard.writeText(new TextDecoder().decode(plaintext));
+      const val = revealed[keyName] || await decryptValue(keyName);
+      await navigator.clipboard.writeText(val);
       setCopied(keyName);
-      setTimeout(() => setCopied(""), 1500);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Decrypt failed");
-    }
+      setTimeout(() => setCopied(""), 2000);
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed"); }
   }
 
   async function handleDelete(keyName: string) {
-    if (!vaultId || !confirm(`Delete ${keyName}?`)) return;
-    try { await api.deleteSecret(vaultId, keyName); load(); } catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed"); }
+    if (!activeVault || !confirm(`Delete "${keyName}" permanently?`)) return;
+    try { await api.deleteSecret(activeVault.id, keyName); loadSecrets(); } catch { /* */ }
   }
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("vaults")} className="p-2 rounded-lg hover:bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <h1 className="text-lg font-bold">{vaultName}</h1>
-        </div>
-        <button onClick={() => navigate("secret-form", { vaultId, vaultName, mode: "add" })}
-          className="p-2 rounded-lg bg-[var(--orange)]/10 text-[var(--orange)] hover:bg-[var(--orange)]/20 transition-colors" title="Add secret">
-          <Plus className="w-4 h-4" />
-        </button>
-      </div>
+  async function handleCreateVault(name: string) {
+    const mk = api.getMasterKey();
+    if (!mk) return;
+    const masterKey = cr.hexToBytes(mk);
+    const vaultKey = cr.generateVaultKey();
+    const encKey = await cr.encryptVaultKey(vaultKey, masterKey);
+    await api.createVault(name, Array.from(encKey));
+    await loadVaults();
+  }
 
-      <Card>
-        {loading ? <div className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[var(--text-muted)]" /></div> :
-          secrets.length === 0 ? <p className="text-center py-8 text-[var(--text-muted)] text-sm">No secrets yet. Click + to add one.</p> :
-          <div className="space-y-1">
-            {secrets.map(s => (
-              <div key={s.key_name} className="flex items-center justify-between p-3 rounded-lg hover:bg-[var(--bg)] transition-colors group">
-                <button onClick={() => navigate("secret-form", { vaultId, vaultName, mode: "edit", keyName: s.key_name })} className="text-left flex-1 min-w-0">
-                  <div className="font-mono text-sm truncate">{s.key_name}</div>
-                  <div className="text-xs text-[var(--text-muted)]">v{s.version}</div>
-                </button>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => handleCopy(s.key_name)} className="p-1.5 rounded hover:bg-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors" title="Copy">
-                    {copied === s.key_name ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                  <button onClick={() => handleDelete(s.key_name)} className="p-1.5 rounded hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 transition-colors" title="Delete">
-                    <Trash2 className="w-3.5 h-3.5" />
+  const filtered = secrets.filter(s => s.key_name.toLowerCase().includes(search.toLowerCase()));
+
+  const sidebarItems = [
+    { icon: Key, label: "Secrets", active: true },
+    { icon: Shield, label: "Environments", soon: true },
+    { icon: Clock, label: "Audit Trail", soon: true },
+    { icon: Users, label: "Access", soon: true },
+    { icon: Settings, label: "Settings", soon: true },
+  ];
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      {/* ── Sidebar ── */}
+      <aside className="w-[220px] shrink-0 bg-[var(--bg-base)] border-r border-[var(--border)] flex flex-col">
+        <div className="p-5 flex items-center gap-3">
+          <Image src="/images/logo-192.png" alt="" width={32} height={32} className="rounded-lg" />
+          <span className="font-bold text-base tracking-tight">MeowPass</span>
+        </div>
+        <nav className="flex-1 px-3 space-y-0.5 mt-2">
+          {sidebarItems.map(item => (
+            <button key={item.label} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+              item.active ? "bg-[var(--orange-glow)] text-[var(--orange)] font-medium" : item.soon ? "text-[var(--text-ghost)] cursor-default" : "text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)]"
+            }`}>
+              <item.icon className="w-[18px] h-[18px]" />
+              <span>{item.label}</span>
+              {item.soon && <span className="ml-auto text-[10px] uppercase tracking-wider opacity-60">Soon</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="p-4 border-t border-[var(--border)]">
+          <div className="text-xs text-[var(--text-ghost)]">Early Access</div>
+          <div className="text-xs text-[var(--text-dim)] mt-1">All features free</div>
+        </div>
+      </aside>
+
+      {/* ── Main ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="h-[60px] shrink-0 border-b border-[var(--border)] bg-[var(--bg-base)] flex items-center justify-between px-6">
+          <div className="flex items-center gap-4">
+            {/* Vault selector */}
+            <div ref={dropdownRef} className="relative">
+              <button onClick={() => setVaultDropdown(!vaultDropdown)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-[var(--border-hover)] bg-[var(--bg-card)] text-sm transition-colors">
+                <div className="w-2 h-2 rounded-full bg-[var(--green)]" />
+                <span className="font-medium">{activeVault?.name || "Select vault"}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-[var(--text-dim)]" />
+              </button>
+              {vaultDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-56 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl shadow-black/50 z-50 overflow-hidden animate-fade-in">
+                  {vaults.map(v => (
+                    <button key={v.id} onClick={() => { setActiveVault(v); setVaultDropdown(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:bg-[var(--bg-card)] transition-colors ${v.id === activeVault?.id ? "text-[var(--orange)]" : "text-[var(--text-secondary)]"}`}>
+                      <div className={`w-2 h-2 rounded-full ${v.id === activeVault?.id ? "bg-[var(--orange)]" : "bg-[var(--text-ghost)]"}`} />
+                      {v.name}
+                    </button>
+                  ))}
+                  <button onClick={() => { setVaultDropdown(false); setModal("add-vault"); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--text-dim)] hover:bg-[var(--bg-card)] hover:text-[var(--orange)] transition-colors border-t border-[var(--border)]">
+                    <FolderPlus className="w-4 h-4" /> New vault
                   </button>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
+            <span className="text-xs text-[var(--text-ghost)]">{secrets.length} secret{secrets.length !== 1 ? "s" : ""}</span>
           </div>
-        }
-      </Card>
+
+          <div className="flex items-center gap-3">
+            {user && (
+              <>
+                <span className="text-xs px-2 py-1 rounded-md bg-[var(--orange-glow)] text-[var(--orange)] capitalize font-medium">{user.subscription_tier}</span>
+                <span className="text-xs text-[var(--text-dim)]">{user.email}</span>
+              </>
+            )}
+            <button onClick={onLogout} className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors" title="Log out">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          {loading ? <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-[var(--text-dim)]" /></div> :
+          !activeVault ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
+                <FolderPlus className="w-7 h-7 text-[var(--text-ghost)]" />
+              </div>
+              <h2 className="text-lg font-semibold text-[var(--text-secondary)]">No vaults yet</h2>
+              <p className="text-sm text-[var(--text-dim)] mt-1 mb-4">Create your first vault to start managing secrets</p>
+              <button onClick={() => setModal("add-vault")} className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/20 transition-all">
+                Create Vault
+              </button>
+            </div>
+          ) : (
+            <div className="animate-fade-in">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between mb-5">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-ghost)]" />
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter secrets..."
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm outline-none focus:border-[var(--orange)]/50 transition-colors placeholder:text-[var(--text-ghost)]" />
+                </div>
+                <button onClick={() => { setEditKey(""); setModal("add-secret"); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-medium hover:shadow-lg hover:shadow-[var(--orange)]/20 transition-all">
+                  <Plus className="w-4 h-4" /> Add Secret
+                </button>
+              </div>
+
+              {/* Secret list */}
+              {secretsLoading ? <div className="flex items-center justify-center h-40"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-dim)]" /></div> :
+              filtered.length === 0 ? (
+                <div className="rounded-xl border border-[var(--border)] border-dashed bg-[var(--bg-card)]/50 p-12 text-center">
+                  <Key className="w-8 h-8 text-[var(--text-ghost)] mx-auto mb-3" />
+                  <p className="text-sm text-[var(--text-dim)]">{search ? "No secrets match your filter" : "No secrets in this vault"}</p>
+                  {!search && <p className="text-xs text-[var(--text-ghost)] mt-1">Click &quot;Add Secret&quot; to store your first one</p>}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
+                  {/* Table header */}
+                  <div className="grid grid-cols-[1fr_2fr_auto_auto] gap-4 px-5 py-3 border-b border-[var(--border)] text-xs text-[var(--text-ghost)] uppercase tracking-wider font-medium">
+                    <span>Key</span>
+                    <span>Value</span>
+                    <span>Version</span>
+                    <span className="text-right">Actions</span>
+                  </div>
+                  {/* Rows */}
+                  {filtered.map((s, i) => (
+                    <div key={s.key_name} className={`grid grid-cols-[1fr_2fr_auto_auto] gap-4 items-center px-5 py-3.5 group hover:bg-[var(--bg-elevated)]/50 transition-colors ${i < filtered.length - 1 ? "border-b border-[var(--border)]/50" : ""}`}>
+                      <span className="font-mono text-sm font-medium text-[var(--text)] truncate">{s.key_name}</span>
+                      <div className="font-mono text-sm truncate">
+                        {revealed[s.key_name] ? (
+                          <span className="text-[var(--green)] break-all">{revealed[s.key_name]}</span>
+                        ) : (
+                          <span className="text-[var(--text-ghost)] tracking-widest select-none">{"••••••••••••"}</span>
+                        )}
+                      </div>
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] text-[var(--text-dim)] font-mono">v{s.version}</span>
+                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                        <IconBtn title={revealed[s.key_name] ? "Hide" : "Reveal"} onClick={() => handleReveal(s.key_name)}
+                          className={revealed[s.key_name] ? "text-[var(--green)]" : ""}>
+                          {revealed[s.key_name] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </IconBtn>
+                        <IconBtn title="Copy" onClick={() => handleCopy(s.key_name)}>
+                          {copied === s.key_name ? <Check className="w-3.5 h-3.5 text-[var(--green)]" /> : <Copy className="w-3.5 h-3.5" />}
+                        </IconBtn>
+                        <IconBtn title="Edit" onClick={() => { setEditKey(s.key_name); setModal("edit-secret"); }}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </IconBtn>
+                        <IconBtn title="Delete" onClick={() => handleDelete(s.key_name)} className="hover:!text-[var(--red)]">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </IconBtn>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* ── Modals ── */}
+      {modal === "add-secret" && activeVault && (
+        <SecretModal vaultId={activeVault.id} mode="add" onClose={() => setModal(null)} onSaved={loadSecrets} />
+      )}
+      {modal === "edit-secret" && activeVault && (
+        <SecretModal vaultId={activeVault.id} mode="edit" editKey={editKey} onClose={() => setModal(null)} onSaved={loadSecrets} />
+      )}
+      {modal === "add-vault" && (
+        <VaultModal onClose={() => setModal(null)} onCreate={handleCreateVault} />
+      )}
     </div>
   );
 }
 
-// ── Secret Form ──
+/* ═══════════════════════════════════════════════════════════
+   SECRET MODAL
+   ═══════════════════════════════════════════════════════════ */
 
-function SecretFormView({ navigate, params }: { navigate: (v: View, p?: ViewParams) => void; params: ViewParams }) {
-  const { vaultId, vaultName, mode, keyName } = params;
+function SecretModal({ vaultId, mode, editKey, onClose, onSaved }: {
+  vaultId: string; mode: "add" | "edit"; editKey?: string; onClose: () => void; onSaved: () => void;
+}) {
   const isEdit = mode === "edit";
-  const [key, setKey] = useState(keyName || "");
+  const [keyName, setKeyName] = useState(editKey || "");
   const [value, setValue] = useState("");
+  const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [show, setShow] = useState(false);
-  const [loadingExisting, setLoadingExisting] = useState(isEdit);
+  const [loading, setLoading] = useState(isEdit);
 
   useEffect(() => {
-    if (!isEdit || !vaultId || !keyName) return;
+    if (!isEdit || !editKey) return;
     (async () => {
       try {
-        const mk = api.getMasterKey();
-        if (!mk) { navigate("unlock"); return; }
-        const masterKey = crypto.hexToBytes(mk);
+        const mk = api.getMasterKey(); if (!mk) return;
+        const masterKey = cr.hexToBytes(mk);
         const vault = await api.getVault(vaultId);
-        const encKeyBytes = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : crypto.base64ToBytes(vault.encrypted_key);
-        const vaultKey = await crypto.decryptVaultKey(encKeyBytes, masterKey);
-        const secret = await api.getSecret(vaultId, keyName);
-        const encBytes = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : crypto.base64ToBytes(secret.encrypted_value);
-        const plaintext = await crypto.decrypt(encBytes, vaultKey);
-        setValue(new TextDecoder().decode(plaintext));
-      } catch { /* ignore */ }
-      setLoadingExisting(false);
+        const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
+        const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
+        const secret = await api.getSecret(vaultId, editKey);
+        const encVal = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : cr.base64ToBytes(secret.encrypted_value);
+        setValue(new TextDecoder().decode(await cr.decrypt(encVal, vaultKey)));
+      } catch { /* */ }
+      setLoading(false);
     })();
-  }, [isEdit, vaultId, keyName, navigate]);
+  }, [isEdit, editKey, vaultId]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(""); setBusy(true);
     try {
-      if (!vaultId || !key.trim()) throw new Error("Key name required");
-      const mk = api.getMasterKey();
-      if (!mk) { navigate("unlock"); return; }
-      const masterKey = crypto.hexToBytes(mk);
+      if (!keyName.trim()) throw new Error("Key name required");
+      const mk = api.getMasterKey(); if (!mk) throw new Error("Session expired");
+      const masterKey = cr.hexToBytes(mk);
       const vault = await api.getVault(vaultId);
-      const encKeyBytes = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : crypto.base64ToBytes(vault.encrypted_key);
-      const vaultKey = await crypto.decryptVaultKey(encKeyBytes, masterKey);
-      const encrypted = await crypto.encrypt(new TextEncoder().encode(value), vaultKey);
-      await api.setSecret(vaultId, key.trim(), Array.from(encrypted));
-      navigate("secrets", { vaultId, vaultName });
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed");
-    }
+      const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
+      const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
+      const encrypted = await cr.encrypt(new TextEncoder().encode(value), vaultKey);
+      await api.setSecret(vaultId, keyName.trim(), Array.from(encrypted));
+      onSaved(); onClose();
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed"); }
     setBusy(false);
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate("secrets", { vaultId, vaultName })} className="p-2 rounded-lg hover:bg-[var(--bg-card)] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <h1 className="text-lg font-bold">{isEdit ? "Edit Secret" : "Add Secret"}</h1>
-      </div>
-      <Card>
-        {loadingExisting ? <div className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-[var(--text-muted)]" /></div> :
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Key Name" value={key} onChange={setKey} placeholder="STRIPE_SECRET_KEY" disabled={isEdit} mono />
+    <ModalOverlay onClose={onClose}>
+      <div className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black/60 animate-fade-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+          <h2 className="text-base font-semibold">{isEdit ? "Edit Secret" : "Add Secret"}</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+        {loading ? <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-dim)]" /></div> :
+          <form onSubmit={submit} className="p-6 space-y-5">
+            <Input label="Key Name" value={keyName} onChange={setKeyName} placeholder="STRIPE_SECRET_KEY" disabled={isEdit} mono />
             <div>
-              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Value</label>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">Value</label>
               <div className="relative">
                 <textarea value={value} onChange={e => setValue(e.target.value)} placeholder="Enter secret value..."
-                  rows={4} className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm font-mono outline-none focus:border-[var(--orange)] transition-colors resize-y pr-10"
+                  rows={4} className="w-full px-3.5 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm font-mono outline-none focus:border-[var(--orange)]/50 transition-colors resize-y pr-10"
                   style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties} />
-                <button type="button" onClick={() => setShow(!show)} className="absolute top-2.5 right-2.5 text-[var(--text-muted)] hover:text-[var(--text)]">
+                <button type="button" onClick={() => setShow(!show)} className="absolute top-3 right-3 text-[var(--text-dim)] hover:text-[var(--text)] transition-colors">
                   {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            {error && <ErrorBox msg={error} />}
-            <Btn disabled={busy}>{busy ? "Encrypting..." : isEdit ? "Update Secret" : "Save Secret"}</Btn>
+            {error && <ErrorMsg msg={error} />}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors">Cancel</button>
+              <PrimaryBtn disabled={busy} className="flex-1">{busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Encrypting...</> : isEdit ? "Update" : "Save"}</PrimaryBtn>
+            </div>
           </form>
         }
-      </Card>
-    </div>
+      </div>
+    </ModalOverlay>
   );
 }
 
-// ── Shared Components ──
+/* ═══════════════════════════════════════════════════════════
+   VAULT MODAL
+   ═══════════════════════════════════════════════════════════ */
 
-function Header({ subtitle }: { subtitle?: string }) {
+function VaultModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => Promise<void> }) {
+  const [name, setName] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); if (!name.trim()) return;
+    setBusy(true);
+    try { await onCreate(name.trim()); onClose(); }
+    catch { /* */ }
+    setBusy(false);
+  }
   return (
-    <div className="text-center mb-6">
-      <Image src="/images/logo-192.png" alt="MeowPass" width={48} height={48} className="rounded-xl mx-auto mb-3" />
-      <h1 className="text-xl font-bold">MeowPass</h1>
-      {subtitle && <p className="text-sm text-[var(--text-muted)] mt-1">{subtitle}</p>}
+    <ModalOverlay onClose={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] shadow-2xl shadow-black/60 animate-fade-in">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+          <h2 className="text-base font-semibold">Create Vault</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+        <form onSubmit={submit} className="p-6 space-y-5">
+          <Input label="Vault Name" value={name} onChange={setName} placeholder="my-project" autoFocus />
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors">Cancel</button>
+            <PrimaryBtn disabled={busy || !name.trim()} className="flex-1">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}</PrimaryBtn>
+          </div>
+        </form>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHARED PRIMITIVES
+   ═══════════════════════════════════════════════════════════ */
+
+function CenterShell({ children }: { children: React.ReactNode }) {
+  return <div className="min-h-screen flex items-center justify-center p-4 relative z-10"><div className="w-full max-w-md">{children}</div></div>;
+}
+
+function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-6">{children}</div>;
-}
-
-function Field({ label, type = "text", value, onChange, placeholder, disabled, mono, autoFocus }: {
+function Input({ label, type = "text", value, onChange, placeholder, disabled, mono, autoFocus }: {
   label: string; type?: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; mono?: boolean; autoFocus?: boolean;
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-2">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} required disabled={disabled} autoFocus={autoFocus}
-        className={`w-full px-3 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm outline-none focus:border-[var(--orange)] transition-colors disabled:opacity-50 ${mono ? "font-mono" : ""}`} />
+        className={`w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-deep)] text-sm outline-none focus:border-[var(--orange)]/50 transition-colors disabled:opacity-40 placeholder:text-[var(--text-ghost)] ${mono ? "font-mono" : ""}`} />
     </div>
   );
 }
 
-function Btn({ children, disabled }: { children: React.ReactNode; disabled?: boolean }) {
+function PrimaryBtn({ children, disabled, className = "" }: { children: React.ReactNode; disabled?: boolean; className?: string }) {
   return (
     <button type="submit" disabled={disabled}
-      className="w-full py-2.5 rounded-lg bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[var(--orange)]/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+      className={`flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-[var(--orange)] to-[var(--orange-light)] text-white text-sm font-semibold hover:shadow-lg hover:shadow-[var(--orange)]/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${className}`}>
       {children}
     </button>
   );
 }
 
-function ErrorBox({ msg }: { msg: string }) {
-  return <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">{msg}</div>;
+function IconBtn({ children, title, onClick, className = "" }: { children: React.ReactNode; title: string; onClick: () => void; className?: string }) {
+  return (
+    <button onClick={onClick} title={title}
+      className={`p-1.5 rounded-lg hover:bg-[var(--bg-elevated)] text-[var(--text-dim)] hover:text-[var(--text)] transition-colors ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+function ErrorMsg({ msg }: { msg: string }) {
+  return <div className="text-sm text-[var(--red)] bg-[var(--red)]/8 border border-[var(--red)]/15 rounded-xl px-4 py-3">{msg}</div>;
 }
