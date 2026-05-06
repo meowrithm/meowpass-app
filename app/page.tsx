@@ -16,7 +16,7 @@ type View = "login" | "unlock" | "dashboard";
 type Modal = null | "add-vault";
 type SidebarTab = "secrets" | "activity" | "access" | "settings";
 interface Vault { id: string; name: string; created_at: string; }
-interface Secret { key_name: string; version: number; }
+interface Secret { key_name: string; env: string; version: number; }
 interface User { email: string; name: string; subscription_tier: string; }
 
 /* ═══════════════════════════════════════════════════════════
@@ -178,38 +178,38 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { loadSecrets(); }, [loadSecrets]);
 
-  async function decryptValue(keyName: string): Promise<string> {
+  async function decryptValue(keyName: string, env?: string): Promise<string> {
     if (!activeVault) throw new Error("No vault");
     const mk = api.getMasterKey(); if (!mk) throw new Error("Session expired");
     const masterKey = cr.hexToBytes(mk);
     const vault = await api.getVault(activeVault.id);
     const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
     const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
-    const secret = await api.getSecret(activeVault.id, keyName);
+    const secret = await api.getSecret(activeVault.id, keyName, env);
     const encVal = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : cr.base64ToBytes(secret.encrypted_value);
     return new TextDecoder().decode(await cr.decrypt(encVal, vaultKey));
   }
 
-  async function handleReveal(keyName: string) {
+  async function handleReveal(keyName: string, env?: string) {
     if (revealed[keyName]) { setRevealed(r => { const n = { ...r }; delete n[keyName]; return n; }); return; }
     try {
-      const val = await decryptValue(keyName);
+      const val = await decryptValue(keyName, env);
       setRevealed(r => ({ ...r, [keyName]: val }));
       setTimeout(() => setRevealed(r => { const n = { ...r }; delete n[keyName]; return n; }), 10000);
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "Decrypt failed"); }
   }
 
-  async function handleCopy(keyName: string) {
+  async function handleCopy(keyName: string, env?: string) {
     try {
-      const val = revealed[keyName] || await decryptValue(keyName);
+      const val = revealed[keyName] || await decryptValue(keyName, env);
       await navigator.clipboard.writeText(val); setCopied(keyName);
       setTimeout(() => setCopied(""), 2000);
     } catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed"); }
   }
 
-  async function handleDelete(keyName: string) {
+  async function handleDelete(keyName: string, env?: string) {
     if (!activeVault || !confirm(`Delete "${keyName}" permanently?`)) return;
-    try { await api.deleteSecret(activeVault.id, keyName); loadSecrets(); } catch { /* */ }
+    try { await api.deleteSecret(activeVault.id, keyName, env); loadSecrets(); } catch { /* */ }
   }
 
   async function handleDeleteVault() {
@@ -267,10 +267,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         <div style={{ padding: 16, borderTop: "1px solid var(--border)" }}>
           <div style={{ fontSize: 10, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>CLI Equivalent</div>
           <code style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--text-dim)", display: "block" }}>
-            {activeTab === "secrets" && "meowpass list"}
+            {activeTab === "secrets" && "mp list"}
             {activeTab === "activity" && "GET /audit-logs"}
-            {activeTab === "access" && "meowpass team list"}
-            {activeTab === "settings" && "meowpass apikey list"}
+            {activeTab === "access" && "mp team list"}
+            {activeTab === "settings" && "mp apikey list"}
           </code>
         </div>
 
@@ -365,7 +365,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   <Search className="mp-search-icon" />
                   <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter secrets..." className="mp-search-input" />
                 </div>
-                <CLIHint cmd="meowpass set KEY VALUE" label="Add via CLI" />
+                <CLIHint cmd="mp set KEY VALUE" label="Add via CLI" />
               </div>
 
               {/* Secret list */}
@@ -373,12 +373,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               filtered.length === 0 ? <EmptySecrets search={search} vaultId={activeVault.id} /> : (
                 <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", overflow: "hidden" }}>
                   {/* Header row */}
-                  <div className="hidden md:grid" style={{ gridTemplateColumns: "1fr 2fr auto auto", gap: 16, padding: "12px 20px", borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>
-                    <span>Key</span><span>Value</span><span>Version</span><span style={{ textAlign: "right" }}>Actions</span>
+                  <div className="hidden md:grid" style={{ gridTemplateColumns: "1fr 2fr auto auto auto", gap: 16, padding: "12px 20px", borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500 }}>
+                    <span>Key</span><span>Value</span><span>Env</span><span>Version</span><span style={{ textAlign: "right" }}>Actions</span>
                   </div>
                   {filtered.map((s, i) => (
-                    <div key={s.key_name} className="group" style={{
-                      display: "grid", gridTemplateColumns: "1fr 2fr auto auto", gap: 16, alignItems: "center",
+                    <div key={`${s.key_name}-${s.env}`} className="group" style={{
+                      display: "grid", gridTemplateColumns: "1fr 2fr auto auto auto", gap: 16, alignItems: "center",
                       padding: "14px 20px", borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none", transition: "background 0.15s"
                     }} onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                       <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 500, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.key_name}</span>
@@ -387,15 +387,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                           ? <span style={{ color: "var(--green)", wordBreak: "break-all", whiteSpace: "normal" }}>{revealed[s.key_name]}</span>
                           : <span style={{ color: "var(--text-ghost)", letterSpacing: "0.15em", userSelect: "none" }}>••••••••••••</span>}
                       </div>
+                      <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 6, background: "var(--bg-elevated)", color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>{s.env}</span>
                       <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 6, background: "var(--bg-elevated)", color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>v{s.version}</span>
                       <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
-                        <button className="mp-icon-btn" title={revealed[s.key_name] ? "Hide" : "Reveal"} onClick={() => handleReveal(s.key_name)} style={revealed[s.key_name] ? { color: "var(--green)" } : {}}>
+                        <button className="mp-icon-btn" title={revealed[s.key_name] ? "Hide" : "Reveal"} onClick={() => handleReveal(s.key_name, s.env)} style={revealed[s.key_name] ? { color: "var(--green)" } : {}}>
                           {revealed[s.key_name] ? <EyeOff style={{ width: 14, height: 14 }} /> : <Eye style={{ width: 14, height: 14 }} />}
                         </button>
-                        <button className="mp-icon-btn" title="Copy" onClick={() => handleCopy(s.key_name)}>
+                        <button className="mp-icon-btn" title="Copy" onClick={() => handleCopy(s.key_name, s.env)}>
                           {copied === s.key_name ? <Check style={{ width: 14, height: 14, color: "var(--green)" }} /> : <Copy style={{ width: 14, height: 14 }} />}
                         </button>
-                        <button className="mp-icon-btn" title="Delete" onClick={() => handleDelete(s.key_name)} onMouseEnter={e => (e.currentTarget.style.color = "var(--red)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-dim)")}>
+                        <button className="mp-icon-btn" title="Delete" onClick={() => handleDelete(s.key_name, s.env)} onMouseEnter={e => (e.currentTarget.style.color = "var(--red)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-dim)")}>
                           <Trash2 style={{ width: 14, height: 14 }} />
                         </button>
                       </div>
@@ -447,7 +448,7 @@ function OnboardingEmpty({ onCreateVault }: { onCreateVault: () => void }) {
         <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", padding: 20, textAlign: "left" }}>
           <div style={{ fontSize: 11, color: "var(--text-ghost)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Get started with the CLI</div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-            {["brew install meowrithm/tap/meowpass", "meowpass login", "meowpass init"].map(cmd => (
+            {["brew install meowrithm/tap/meowpass", "mp login", "mp init"].map(cmd => (
               <div key={cmd} style={{ display: "flex", gap: 12 }}>
                 <span style={{ color: "var(--orange)", userSelect: "none", width: 16 }}>$</span>
                 <span style={{ color: "var(--text)" }}>{cmd}</span>
@@ -455,7 +456,7 @@ function OnboardingEmpty({ onCreateVault }: { onCreateVault: () => void }) {
             ))}
           </div>
           <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 16 }}>
-            After <code style={{ color: "var(--orange)" }}>meowpass init</code>, your secrets appear here automatically.
+            After <code style={{ color: "var(--orange)" }}>mp init</code>, your secrets appear here automatically.
           </p>
         </div>
       </div>
@@ -483,10 +484,10 @@ function EmptySecrets({ search, vaultId }: { search: string; vaultId: string }) 
         <div style={{ marginTop: 16, display: "inline-block", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-card)", padding: 16, textAlign: "left" }}>
           <div style={{ fontSize: 12, color: "var(--text-ghost)", marginBottom: 8 }}>Add secrets via CLI:</div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-            <div><span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>meowpass set STRIPE_KEY sk_live_... --vault {vaultId.slice(0, 8)}...</span></div>
-            <div><span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>meowpass push --vault {vaultId.slice(0, 8)}...</span></div>
+            <div><span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>mp set STRIPE_KEY sk_live_... --vault {vaultId.slice(0, 8)}...</span></div>
+            <div><span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>mp push --vault {vaultId.slice(0, 8)}...</span></div>
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-ghost)", marginTop: 8 }}>Or use <code style={{ color: "var(--orange)" }}>meowpass init</code> to import your .env</div>
+          <div style={{ fontSize: 12, color: "var(--text-ghost)", marginTop: 8 }}>Or use <code style={{ color: "var(--orange)" }}>mp init</code> to import your .env</div>
         </div>
       </>}
     </div>
@@ -628,7 +629,7 @@ function TeamTab() {
           <p style={{ fontSize: 14, color: "var(--text-dim)" }}>No teams yet</p>
           <div style={{ marginTop: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-card)", padding: 12, display: "inline-block", textAlign: "left" }}>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
-              <span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>meowpass team create my-team</span>
+              <span style={{ color: "var(--orange)" }}>$</span> <span style={{ color: "var(--text)" }}>mp team create my-team</span>
             </div>
           </div>
         </div>
@@ -680,7 +681,7 @@ function TeamTab() {
             </div>
             <form onSubmit={handleCreateTeam} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
               <Field label="Team Name" value={newTeamName} onChange={setNewTeamName} placeholder="backend" autoFocus />
-              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass team create {newTeamName || "NAME"}</code></p>
+              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>mp team create {newTeamName || "NAME"}</code></p>
               <div style={{ display: "flex", gap: 12 }}>
                 <button type="button" className="mp-btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
                 <button type="submit" disabled={busy || !newTeamName.trim()} className="mp-btn-primary" style={{ flex: 1 }}>
@@ -716,7 +717,7 @@ function TeamTab() {
                   ))}
                 </div>
               </div>
-              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass team invite {inviteEmail || "EMAIL"} --team {selectedTeam.id.slice(0, 8)}... --role {inviteRole}</code></p>
+              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>mp team invite {inviteEmail || "EMAIL"} --team {selectedTeam.id.slice(0, 8)}... --role {inviteRole}</code></p>
               <div style={{ display: "flex", gap: 12 }}>
                 <button type="button" className="mp-btn-secondary" onClick={() => setShowInvite(false)}>Cancel</button>
                 <button type="submit" disabled={busy || !inviteEmail.trim()} className="mp-btn-primary" style={{ flex: 1 }}>
@@ -794,7 +795,7 @@ function SettingsTab({ user }: { user: User | null }) {
             </div>
           )}
         </div>
-        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass whoami</code></p>
+        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>mp whoami</code></p>
       </div>
 
       {/* API Keys */}
@@ -847,7 +848,7 @@ function SettingsTab({ user }: { user: User | null }) {
           </div>
         )}
 
-        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass apikey create NAME</code></p>
+        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>mp apikey create NAME</code></p>
       </div>
 
       {/* Create key modal */}
@@ -861,7 +862,7 @@ function SettingsTab({ user }: { user: User | null }) {
             </div>
             <form onSubmit={handleCreate} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
               <Field label="Key Name" value={newKeyName} onChange={setNewKeyName} placeholder="my-mcp-key" autoFocus />
-              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass apikey create {newKeyName || "NAME"}</code></p>
+              <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>mp apikey create {newKeyName || "NAME"}</code></p>
               <div style={{ display: "flex", gap: 12 }}>
                 <button type="button" className="mp-btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
                 <button type="submit" disabled={busy || !newKeyName.trim()} className="mp-btn-primary" style={{ flex: 1 }}>
@@ -911,7 +912,7 @@ function VaultModal({ onClose, onCreate }: { onClose: () => void; onCreate: (nam
         </div>
         <form onSubmit={submit} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
           <Field label="Vault Name" value={name} onChange={setName} placeholder="my-project" autoFocus />
-          <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>meowpass vault create {name || "NAME"}</code></p>
+          <p style={{ fontSize: 12, color: "var(--text-ghost)" }}>CLI: <code style={{ color: "var(--orange)" }}>mp vault create {name || "NAME"}</code></p>
           <div style={{ display: "flex", gap: 12 }}>
             <button type="button" className="mp-btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" disabled={busy || !name.trim()} className="mp-btn-primary" style={{ flex: 1 }}>

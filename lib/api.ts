@@ -41,10 +41,10 @@ export const listVaults = () => request("GET", "/vaults");
 export const getVault = (id: string) => request("GET", `/vaults/${id}`);
 export const createVault = (name: string, encryptedKey: number[]) => request("POST", "/vaults", { name, encrypted_key: encryptedKey });
 export const deleteVault = (id: string) => request("DELETE", `/vaults/${id}`);
-export const listSecrets = (vaultId: string) => request("GET", `/vaults/${vaultId}/secrets`);
-export const getSecret = (vaultId: string, key: string) => request("GET", `/vaults/${vaultId}/secrets/${key}`);
+export const listSecrets = (vaultId: string, env?: string) => request("GET", `/vaults/${vaultId}/secrets${env ? `?env=${encodeURIComponent(env)}` : ""}`);
+export const getSecret = (vaultId: string, key: string, env?: string) => request("GET", `/vaults/${vaultId}/secrets/${key}${env ? `?env=${encodeURIComponent(env)}` : ""}`);
 export const setSecret = (vaultId: string, key: string, encryptedValue: number[]) => request("PUT", `/vaults/${vaultId}/secrets/${key}`, { encrypted_value: encryptedValue, nonce: [] });
-export const deleteSecret = (vaultId: string, key: string) => request("DELETE", `/vaults/${vaultId}/secrets/${key}`);
+export const deleteSecret = (vaultId: string, key: string, env?: string) => request("DELETE", `/vaults/${vaultId}/secrets/${key}${env ? `?env=${encodeURIComponent(env)}` : ""}`);
 
 // Audit logs
 export const listAuditLogs = (vaultId?: string, limit = 50) => {
