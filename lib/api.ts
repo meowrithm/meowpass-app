@@ -67,3 +67,6 @@ export const revokeApiKey = (id: string) => request("DELETE", `/apikeys/${id}`);
 
 // Subscription
 export const getSubscription = () => request("GET", "/subscription");
+
+// Promo
+export const redeemPromo = (code: string) => request("POST", "/promo/redeem", { code });

@@ -17,7 +17,7 @@ type Modal = null | "add-vault";
 type SidebarTab = "secrets" | "activity" | "access" | "settings";
 interface Vault { id: string; name: string; created_at: string; }
 interface Secret { key_name: string; env: string; version: number; }
-interface User { email: string; name: string; subscription_tier: string; }
+interface User { email: string; name: string; subscription_tier: string; promo_expires_at?: string; }
 
 /* ═══════════════════════════════════════════════════════════
    APP ROOT
@@ -746,6 +746,25 @@ function SettingsTab({ user }: { user: User | null }) {
   const [createdKey, setCreatedKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [showRedeem, setShowRedeem] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [redeemBusy, setRedeemBusy] = useState(false);
+  const [redeemResult, setRedeemResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function handleRedeem() {
+    if (!promoCode.trim()) return;
+    setRedeemBusy(true);
+    setRedeemResult(null);
+    try {
+      const res = await api.redeemPromo(promoCode.trim());
+      setRedeemResult({ ok: true, msg: `Upgraded to ${res.plan}! Pro access until ${new Date(res.expires_at).toLocaleDateString()}.` });
+      setPromoCode("");
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err: unknown) {
+      setRedeemResult({ ok: false, msg: err instanceof Error ? err.message : "Invalid or already redeemed code" });
+    }
+    setRedeemBusy(false);
+  }
 
   const loadKeys = useCallback(async () => {
     setLoading(true);
@@ -790,8 +809,13 @@ function SettingsTab({ user }: { user: User | null }) {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                 <span style={{ color: "var(--text-dim)" }}>Plan</span>
-                <span style={{ color: "var(--orange)", fontWeight: 500, textTransform: "capitalize" }}>{user.subscription_tier}</span>
+                <span style={{ color: "var(--orange)", fontWeight: 500, textTransform: "capitalize" }}>{user.subscription_tier}{user.promo_expires_at ? ` (until ${new Date(user.promo_expires_at).toLocaleDateString()})` : ""}</span>
               </div>
+              {user.subscription_tier === "free" && (
+                <button onClick={() => setShowRedeem(true)} style={{ marginTop: 8, width: "100%", padding: "10px 16px", borderRadius: 8, border: "1px dashed var(--orange)", background: "transparent", color: "var(--orange)", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,140,66,0.08)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                  Redeem Promo Code
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -870,6 +894,36 @@ function SettingsTab({ user }: { user: User | null }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Redeem promo modal */}
+      {showRedeem && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={() => { setShowRedeem(false); setRedeemResult(null); }} />
+          <div className="mp-card animate-fade-in" style={{ position: "relative", width: "100%", maxWidth: 380, zIndex: 1 }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Redeem Promo Code</h2>
+              <button className="mp-icon-btn" onClick={() => { setShowRedeem(false); setRedeemResult(null); }}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+              {redeemResult ? (
+                <div style={{ borderRadius: 8, padding: 16, border: `1px solid ${redeemResult.ok ? "var(--green)" : "var(--red)"}`, background: redeemResult.ok ? "rgba(74,222,128,0.08)" : "rgba(248,113,113,0.08)" }}>
+                  <p style={{ fontSize: 13, color: redeemResult.ok ? "var(--green)" : "var(--red)" }}>{redeemResult.msg}</p>
+                </div>
+              ) : (
+                <>
+                  <Field label="Promo Code" value={promoCode} onChange={setPromoCode} placeholder="MP-XXXXX" autoFocus />
+                  <div style={{ display: "flex", gap: 12 }}>
+                    <button type="button" className="mp-btn-secondary" onClick={() => setShowRedeem(false)}>Cancel</button>
+                    <button type="button" disabled={redeemBusy || !promoCode.trim()} className="mp-btn-primary" style={{ flex: 1 }} onClick={handleRedeem}>
+                      {redeemBusy ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : "Redeem"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
