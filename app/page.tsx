@@ -98,20 +98,20 @@ function UnlockView({ onSuccess }: { onSuccess: () => void }) {
     e.preventDefault(); setError(""); setBusy(true);
     try {
       let salt = api.getSalt();
-      if (!salt) { const me = await api.getMe(); if (me?.key_salt) { salt = me.key_salt; api.setSalt(salt!); } }
+      const me = await api.getMe();
+      if (!salt && me?.key_salt) { salt = me.key_salt; api.setSalt(salt!); }
       if (!salt) throw new Error("No encryption key found. Please login via CLI first.");
       const key = await cr.deriveKey(pw, cr.base64ToBytes(salt));
-      // Validate by trying to decrypt the first vault's key
-      const encPrivB64 = api.getEncPrivateKey();
-      const encPrivKey = encPrivB64 ? cr.base64ToBytes(encPrivB64) : null;
+      // Validate by trying to decrypt an owned vault's key (AES only)
       const vaults = await api.listVaults();
-      if (vaults && vaults.length > 0) {
-        const vault = await api.getVault(vaults[0].id);
+      const ownedVault = vaults?.find((v: { owner_id: string }) => v.owner_id === me?.id);
+      if (ownedVault) {
+        const vault = await api.getVault(ownedVault.id);
         const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
-        try { await cr.decryptVaultKeyAuto(encKey, key, encPrivKey); } catch { throw new Error("Wrong master password"); }
+        try { await cr.decryptVaultKey(encKey, key); } catch { throw new Error("Wrong master password"); }
       }
       // Generate X25519 key pair if not yet set up
-      if (!encPrivB64) {
+      if (!api.getEncPrivateKey()) {
         try {
           const kp = cr.generateX25519KeyPair();
           const encPriv = await cr.encrypt(kp.privateKey, key);
