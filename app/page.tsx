@@ -107,8 +107,12 @@ function UnlockView({ onSuccess }: { onSuccess: () => void }) {
       const ownedVault = vaults?.find((v: { owner_id: string }) => v.owner_id === me?.id);
       if (ownedVault) {
         const vault = await api.getVault(ownedVault.id);
+        if (!vault.encrypted_key) throw new Error("Vault has no encrypted key — re-create vault from CLI");
         const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
-        try { await cr.decryptVaultKey(encKey, key); } catch { throw new Error("Wrong master password"); }
+        if (encKey.length === 0) throw new Error("Vault encrypted key is empty");
+        try { await cr.decryptVaultKey(encKey, key); } catch {
+          throw new Error(`Wrong master password (vault: ${ownedVault.name}, key: ${encKey.length}b)`);
+        }
       }
       // Generate X25519 key pair if not yet set up
       if (!api.getEncPrivateKey()) {
