@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
     "hash-wasm": "^4.11.0",
     "lucide-react": "^1.14.0",
     "next": "^16.2.4",

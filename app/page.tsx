@@ -102,11 +102,22 @@ function UnlockView({ onSuccess }: { onSuccess: () => void }) {
       if (!salt) throw new Error("No encryption key found. Please login via CLI first.");
       const key = await cr.deriveKey(pw, cr.base64ToBytes(salt));
       // Validate by trying to decrypt the first vault's key
+      const encPrivB64 = api.getEncPrivateKey();
+      const encPrivKey = encPrivB64 ? cr.base64ToBytes(encPrivB64) : null;
       const vaults = await api.listVaults();
       if (vaults && vaults.length > 0) {
         const vault = await api.getVault(vaults[0].id);
         const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
-        try { await cr.decryptVaultKey(encKey, key); } catch { throw new Error("Wrong master password"); }
+        try { await cr.decryptVaultKeyAuto(encKey, key, encPrivKey); } catch { throw new Error("Wrong master password"); }
+      }
+      // Generate X25519 key pair if not yet set up
+      if (!encPrivB64) {
+        try {
+          const kp = cr.generateX25519KeyPair();
+          const encPriv = await cr.encrypt(kp.privateKey, key);
+          api.setEncPrivateKey(cr.bytesToBase64(encPriv));
+          await api.updateKeys(Array.from(kp.publicKey), salt!);
+        } catch { /* non-critical — keys can be set up later */ }
       }
       api.setMasterKey(cr.bytesToHex(key));
       onSuccess();
@@ -189,9 +200,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     if (!activeVault) throw new Error("No vault");
     const mk = api.getMasterKey(); if (!mk) throw new Error("Session expired");
     const masterKey = cr.hexToBytes(mk);
+    const encPrivB64 = api.getEncPrivateKey();
+    const encPrivKey = encPrivB64 ? cr.base64ToBytes(encPrivB64) : null;
     const vault = await api.getVault(activeVault.id);
     const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
-    const vaultKey = await cr.decryptVaultKey(encKey, masterKey);
+    const vaultKey = await cr.decryptVaultKeyAuto(encKey, masterKey, encPrivKey);
     const secret = await api.getSecret(activeVault.id, keyName, env);
     const encVal = secret.encrypted_value instanceof Array ? new Uint8Array(secret.encrypted_value) : cr.base64ToBytes(secret.encrypted_value);
     return new TextDecoder().decode(await cr.decrypt(encVal, vaultKey));

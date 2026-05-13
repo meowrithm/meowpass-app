@@ -16,9 +16,14 @@ export function clearMasterKey() { sessionStorage.removeItem("meowpass_mk"); }
 export function getSalt() { return localStorage.getItem("meowpass_salt"); }
 export function setSalt(s: string) { localStorage.setItem("meowpass_salt", s); }
 
+// X25519 encrypted private key (stored in localStorage, encrypted with master key)
+export function getEncPrivateKey() { return localStorage.getItem("meowpass_enc_privkey"); }
+export function setEncPrivateKey(b64: string) { localStorage.setItem("meowpass_enc_privkey", b64); }
+
 export function clearAll() {
   clearToken(); clearMasterKey();
   localStorage.removeItem("meowpass_salt");
+  localStorage.removeItem("meowpass_enc_privkey");
 }
 
 async function request(method: string, path: string, body?: unknown) {
@@ -37,6 +42,7 @@ async function request(method: string, path: string, body?: unknown) {
 export const login = (email: string, password: string) => request("POST", "/auth/login", { email, password });
 export const register = (email: string, name: string, password: string) => request("POST", "/auth/register", { email, name, password });
 export const getMe = () => request("GET", "/auth/me");
+export const updateKeys = (publicKey: number[], keySalt: string) => request("PUT", "/auth/me/keys", { public_key: publicKey, key_salt: keySalt });
 export const listVaults = () => request("GET", "/vaults");
 export const getVault = (id: string) => request("GET", `/vaults/${id}`);
 export const createVault = (name: string, encryptedKey: number[]) => request("POST", "/vaults", { name, encrypted_key: encryptedKey });
