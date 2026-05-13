@@ -59,6 +59,7 @@ export const listTeams = () => request("GET", "/teams");
 export const createTeam = (name: string) => request("POST", "/teams", { name });
 export const listTeamMembers = (teamId: string) => request("GET", `/teams/${teamId}/members`);
 export const inviteTeamMember = (teamId: string, email: string, role = "member") => request("POST", `/teams/${teamId}/invite`, { email, role });
+export const removeTeamMember = (teamId: string, userId: string) => request("DELETE", `/teams/${teamId}/members/${userId}`);
 
 // API Keys
 export const listApiKeys = () => request("GET", "/apikeys");

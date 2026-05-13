@@ -560,7 +560,7 @@ function ActivityTab({ vaultId }: { vaultId?: string }) {
    ═══════════════════════════════════════════════════════════ */
 
 interface Team { id: string; name: string; }
-interface TeamMember { user_id: string; role: string; email?: string; }
+interface TeamMember { user_id: string; email: string; name: string; role: string; }
 
 function TeamTab() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -605,6 +605,11 @@ function TeamTab() {
     setBusy(true);
     try { await api.inviteTeamMember(selectedTeam.id, inviteEmail.trim(), inviteRole); setInviteEmail(""); setShowInvite(false); setMembers(await api.listTeamMembers(selectedTeam.id) || []); } catch { /* */ }
     setBusy(false);
+  }
+
+  async function handleRemoveMember(userId: string, email: string) {
+    if (!selectedTeam || !confirm(`Remove ${email} from ${selectedTeam.name}?`)) return;
+    try { await api.removeTeamMember(selectedTeam.id, userId); setMembers(await api.listTeamMembers(selectedTeam.id) || []); } catch { /* */ }
   }
 
   const roleColors: Record<string, string> = { owner: "#FF6D00", admin: "#3b82f6", member: "var(--text-dim)" };
@@ -661,8 +666,19 @@ function TeamTab() {
                 <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--text-dim)" }}>No members yet</div>
               ) : members.map((m, i) => (
                 <div key={m.user_id} style={{ padding: "10px 20px", borderBottom: i < members.length - 1 ? "1px solid var(--border)" : "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 13, color: "var(--text)" }}>{m.email || m.user_id.slice(0, 8) + "..."}</span>
-                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--bg-elevated)", color: roleColors[m.role] || "var(--text-dim)", fontWeight: 500, textTransform: "capitalize" }}>{m.role}</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{m.name || m.email}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-ghost)", fontFamily: "'JetBrains Mono', monospace" }}>{m.email}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--bg-elevated)", color: roleColors[m.role] || "var(--text-dim)", fontWeight: 500, textTransform: "capitalize" }}>{m.role}</span>
+                    {m.role !== "owner" && (
+                      <button className="mp-icon-btn" title="Remove member" onClick={() => handleRemoveMember(m.user_id, m.email)}
+                        onMouseEnter={e => (e.currentTarget.style.color = "var(--red)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-dim)")}>
+                        <Trash style={{ width: 13, height: 13 }} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
