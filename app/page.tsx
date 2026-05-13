@@ -196,7 +196,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       const val = await decryptValue(keyName, env);
       setRevealed(r => ({ ...r, [keyName]: val }));
       setTimeout(() => setRevealed(r => { const n = { ...r }; delete n[keyName]; return n; }), 10000);
-    } catch (err: unknown) { alert(err instanceof Error ? err.message : "Decrypt failed"); }
+    } catch (err: unknown) { alert(err instanceof Error && err.message ? err.message : "Decrypt failed — check your master password"); }
   }
 
   async function handleCopy(keyName: string, env?: string) {
@@ -204,7 +204,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       const val = revealed[keyName] || await decryptValue(keyName, env);
       await navigator.clipboard.writeText(val); setCopied(keyName);
       setTimeout(() => setCopied(""), 2000);
-    } catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed"); }
+    } catch (err: unknown) { alert(err instanceof Error && err.message ? err.message : "Failed to copy"); }
   }
 
   async function handleDelete(keyName: string, env?: string) {
