@@ -101,6 +101,13 @@ function UnlockView({ onSuccess }: { onSuccess: () => void }) {
       if (!salt) { const me = await api.getMe(); if (me?.key_salt) { salt = me.key_salt; api.setSalt(salt!); } }
       if (!salt) throw new Error("No encryption key found. Please login via CLI first.");
       const key = await cr.deriveKey(pw, cr.base64ToBytes(salt));
+      // Validate by trying to decrypt the first vault's key
+      const vaults = await api.listVaults();
+      if (vaults && vaults.length > 0) {
+        const vault = await api.getVault(vaults[0].id);
+        const encKey = vault.encrypted_key instanceof Array ? new Uint8Array(vault.encrypted_key) : cr.base64ToBytes(vault.encrypted_key);
+        try { await cr.decryptVaultKey(encKey, key); } catch { throw new Error("Wrong master password"); }
+      }
       api.setMasterKey(cr.bytesToHex(key));
       onSuccess();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : "Failed"); }
