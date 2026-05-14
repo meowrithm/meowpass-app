@@ -77,3 +77,7 @@ export const getSubscription = () => request("GET", "/subscription");
 
 // Promo
 export const redeemPromo = (code: string) => request("POST", "/promo/redeem", { code });
+
+// Checkout & Subscription Management
+export const createCheckout = (plan: string) => request("POST", "/checkout", { plan });
+export const createPortal = () => request("POST", "/portal");

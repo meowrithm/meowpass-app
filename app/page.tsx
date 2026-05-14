@@ -190,6 +190,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { loadVaults(); }, []);// eslint-disable-line
 
+  // Refresh user data when window regains focus (e.g. after checkout)
+  useEffect(() => {
+    const onFocus = () => { api.getMe().then(me => { if (me) setUser(me); }).catch(() => {}); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   const loadSecrets = useCallback(async () => {
     if (!activeVault) return;
     setSecretsLoading(true);
@@ -851,8 +858,18 @@ function SettingsTab({ user }: { user: User | null }) {
                 <span style={{ color: "var(--orange)", fontWeight: 500, textTransform: "capitalize" }}>{user.subscription_tier}{user.promo_expires_at ? ` (until ${new Date(user.promo_expires_at).toLocaleDateString()})` : ""}</span>
               </div>
               {user.subscription_tier === "free" && (
-                <button onClick={() => setShowRedeem(true)} style={{ marginTop: 8, width: "100%", padding: "10px 16px", borderRadius: 8, border: "1px dashed var(--orange)", background: "transparent", color: "var(--orange)", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,140,66,0.08)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  Redeem Promo Code
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button onClick={async () => { try { const r = await api.createCheckout("pro"); if (r.checkout_url) window.open(r.checkout_url, "_blank"); } catch {} }} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, background: "linear-gradient(135deg, var(--orange), #ff6d00)", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none" }}>
+                    Upgrade to Pro — $3/mo
+                  </button>
+                  <button onClick={() => setShowRedeem(true)} style={{ padding: "10px 16px", borderRadius: 8, border: "1px dashed var(--border)", background: "transparent", color: "var(--text-dim)", fontSize: 13, cursor: "pointer" }}>
+                    Redeem Code
+                  </button>
+                </div>
+              )}
+              {user.subscription_tier !== "free" && !user.promo_expires_at && (
+                <button onClick={async () => { try { const r = await api.createPortal(); if (r.portal_url) window.open(r.portal_url, "_blank"); else alert("Portal not available — contact support"); } catch { alert("No subscription found to manage"); } }} style={{ marginTop: 8, width: "100%", padding: "10px 16px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text-dim)", fontSize: 13, cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                  Manage Subscription
                 </button>
               )}
             </div>
