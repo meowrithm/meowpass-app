@@ -41,12 +41,26 @@ export default function VercelConfigPage() {
   const configId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("configurationId") : null;
 
   useEffect(() => {
-    loadData();
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("connected") === "true") {
-      setJustConnected(true);
-      window.history.replaceState({}, "", "/integrations/vercel");
-      setTimeout(() => setJustConnected(false), 5000);
+    async function init() {
+      // If Vercel sent us here with a configurationId, try to claim the pending token
+      const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const cfgId = params?.get("configurationId");
+      if (cfgId) {
+        try {
+          await api.completeVercel(cfgId);
+          setJustConnected(true);
+          window.history.replaceState({}, "", "/integrations/vercel");
+          setTimeout(() => setJustConnected(false), 5000);
+        } catch { /* already claimed or doesn't exist */ }
+      }
+      if (params?.get("connected") === "true") {
+        setJustConnected(true);
+        window.history.replaceState({}, "", "/integrations/vercel");
+        setTimeout(() => setJustConnected(false), 5000);
+      }
+      await loadData();
     }
+    init();
   }, []);
 
   async function loadData() {
