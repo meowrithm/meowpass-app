@@ -196,8 +196,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     const configId = params.get("configurationId");
     if (params.get("vercel_connected") === "true" && configId) {
       api.completeVercel(configId).then(() => {
-        window.history.replaceState({}, "", "/");
-      }).catch(() => {});
+        window.location.href = "/integrations/vercel?connected=true";
+      }).catch(() => {
+        window.location.href = "/integrations/vercel?error=true";
+      });
     }
   }, []);
 

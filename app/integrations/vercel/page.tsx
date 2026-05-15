@@ -37,10 +37,16 @@ export default function VercelConfigPage() {
   const [selectedEnv, setSelectedEnv] = useState("production");
   const [addingMapping, setAddingMapping] = useState(false);
 
+  const [justConnected, setJustConnected] = useState(false);
   const configId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("configurationId") : null;
 
   useEffect(() => {
     loadData();
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("connected") === "true") {
+      setJustConnected(true);
+      window.history.replaceState({}, "", "/integrations/vercel");
+      setTimeout(() => setJustConnected(false), 5000);
+    }
   }, []);
 
   async function loadData() {
@@ -134,6 +140,12 @@ export default function VercelConfigPage() {
           <p style={{ fontSize: 13, color: "var(--text-dim)" }}>Sync E2E encrypted secrets to Vercel environment variables</p>
         </div>
       </div>
+
+      {justConnected && (
+        <div style={{ margin: "16px 0", padding: 12, borderRadius: 8, border: "1px solid var(--green)", background: "rgba(34,197,94,0.08)", color: "var(--green)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <Check style={{ width: 16, height: 16 }} /> Vercel connected successfully! Map a vault to a project below to start syncing.
+        </div>
+      )}
 
       {error && (
         <div style={{ margin: "16px 0", padding: 12, borderRadius: 8, border: "1px solid var(--red)", background: "rgba(239,68,68,0.08)", color: "var(--red)", fontSize: 13 }}>
