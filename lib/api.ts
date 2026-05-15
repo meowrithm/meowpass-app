@@ -88,3 +88,4 @@ export const connectVercel = (accessToken: string) => request("POST", "/integrat
 export const listVercelProjects = () => request("GET", "/integrations/vercel/projects");
 export const disconnectIntegration = (id: string) => request("DELETE", `/integrations/${id}`);
 export const updateIntegrationMappings = (id: string, mappings: unknown[]) => request("PATCH", `/integrations/${id}/mappings`, { project_mappings: mappings });
+export const completeVercel = (configurationId: string) => request("POST", "/integrations/vercel/complete", { configuration_id: configurationId });

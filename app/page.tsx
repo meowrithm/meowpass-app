@@ -190,6 +190,17 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   useEffect(() => { loadVaults(); }, []);// eslint-disable-line
 
+  // Complete Vercel OAuth if redirected back with configurationId
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const configId = params.get("configurationId");
+    if (params.get("vercel_connected") === "true" && configId) {
+      api.completeVercel(configId).then(() => {
+        window.history.replaceState({}, "", "/");
+      }).catch(() => {});
+    }
+  }, []);
+
   // Refresh user data when window regains focus (e.g. after checkout)
   useEffect(() => {
     const onFocus = () => { api.getMe().then(me => { if (me) setUser(me); }).catch(() => {}); };
