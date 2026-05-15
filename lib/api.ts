@@ -81,3 +81,10 @@ export const redeemPromo = (code: string) => request("POST", "/promo/redeem", { 
 // Checkout & Subscription Management
 export const createCheckout = (plan: string) => request("POST", "/checkout", { plan });
 export const createPortal = () => request("POST", "/portal");
+
+// Integrations
+export const listIntegrations = () => request("GET", "/integrations");
+export const connectVercel = (accessToken: string) => request("POST", "/integrations/vercel/connect", { access_token: accessToken });
+export const listVercelProjects = () => request("GET", "/integrations/vercel/projects");
+export const disconnectIntegration = (id: string) => request("DELETE", `/integrations/${id}`);
+export const updateIntegrationMappings = (id: string, mappings: unknown[]) => request("PATCH", `/integrations/${id}/mappings`, { project_mappings: mappings });
