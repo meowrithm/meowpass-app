@@ -931,6 +931,27 @@ function SettingsTab({ user }: { user: User | null }) {
         <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>mp apikey create NAME</code></p>
       </div>
 
+      {/* Integrations */}
+      <div style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>Integrations</h2>
+        <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>Connect MeowPass to your deployment platform</p>
+        <div style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-card)", overflow: "hidden" }}>
+          <a href="/integrations/vercel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", textDecoration: "none", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="16" height="16" viewBox="0 0 76 65" fill="white"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>Vercel</div>
+                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>Sync secrets to Vercel environment variables</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 12, color: "var(--text-ghost)" }}>Configure →</span>
+          </a>
+        </div>
+        <p style={{ fontSize: 11, color: "var(--text-ghost)", marginTop: 8 }}>CLI: <code style={{ color: "var(--orange)" }}>mp vercel sync --project NAME --env production</code></p>
+      </div>
+
       {/* Create key modal */}
       {showCreate && (
         <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
